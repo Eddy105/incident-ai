@@ -8,6 +8,7 @@ from . import __version__
 from .analyzer import analyze_all, analyze_text
 from .enrichment import EnrichmentError, enrich_with_openai
 from .formatters import format_json, format_json_many, format_text, format_text_many
+from .ingest import InputFormatError, normalize_input
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +36,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--all",
         action="store_true",
         help="Return every distinct recognized incident, ordered by confidence.",
+    )
+    analyze.add_argument(
+        "--input-format",
+        choices=("auto", "text", "jsonl"),
+        default="auto",
+        help="Input format: auto-detect JSON Lines, force plain text, or require JSON Lines (default: auto).",
     )
     analyze.add_argument(
         "--enrich",
@@ -69,8 +76,11 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         text = _read_source(args.source)
+        text = normalize_input(text, args.input_format)
     except OSError as exc:
         parser.exit(3, f"incident-ai: unable to read {args.source!r}: {exc}\n")
+    except InputFormatError as exc:
+        parser.exit(3, f"incident-ai: invalid structured input: {exc}\n")
 
     if args.all:
         analyses = analyze_all(text)

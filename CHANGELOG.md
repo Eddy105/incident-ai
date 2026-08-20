@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented here.
 
+## [0.3.0] - 2026-08-20
+
+### Added
+
+- Structured JSON Lines ingestion for journald, container, and application logs
+- `--input-format auto|text|jsonl` with safe auto-detection and strict validation mode
+- Message extraction from common `MESSAGE`, `message`, `msg`, and `log` fields
+
 ## [0.2.0] - 2026-08-20
 
 ### Added
