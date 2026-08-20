@@ -35,7 +35,8 @@ def _context_from_record(record: dict[str, object]) -> str:
     for label, _keys in _CONTEXT_FIELDS:
         value = _context_value(record, label)
         if value is not None:
-            context.append(f"{label}={value.replace(']', '\\]')[:120]}")
+            escaped = value.replace("]", "\\]")[:120]
+            context.append(f"{label}={escaped}")
     return " ".join(context)
 
 
