@@ -33,6 +33,41 @@ def test_context_prefers_journald_identifiers_over_generic_fields() -> None:
     assert normalize_input(text, "jsonl", include_context=True) == "[service=nginx] Permission denied"
 
 
+def test_source_filters_select_matching_records() -> None:
+    text = (
+        '{"MESSAGE":"No space left on device","_HOSTNAME":"web-01","_SYSTEMD_UNIT":"api.service"}\n'
+        '{"MESSAGE":"Permission denied","_HOSTNAME":"web-02","_SYSTEMD_UNIT":"api.service"}\n'
+        '{"MESSAGE":"Could not resolve host: db.internal","_HOSTNAME":"web-01","_SYSTEMD_UNIT":"worker.service"}'
+    )
+
+    normalized = normalize_input(
+        text,
+        source_filters={"host": "web-01", "unit": "api.service"},
+        include_context=True,
+    )
+
+    assert normalized == "[host=web-01 unit=api.service] No space left on device"
+
+
+def test_source_filters_support_generic_application_fields() -> None:
+    text = (
+        '{"message":"Permission denied","service":"api","container_name":"api-1"}\n'
+        '{"message":"No space left on device","service":"worker","container_name":"worker-1"}'
+    )
+
+    assert normalize_input(text, source_filters={"service": "api", "container": "api-1"}) == "Permission denied"
+
+
+def test_source_filters_require_structured_input() -> None:
+    with pytest.raises(InputFormatError, match="source filters require JSON Lines input"):
+        normalize_input("Permission denied", "text", source_filters={"host": "web-01"})
+
+
+def test_auto_with_source_filters_rejects_mixed_input() -> None:
+    with pytest.raises(InputFormatError, match="invalid JSON on line 2"):
+        normalize_input('{"message":"Permission denied"}\nplain text line', source_filters={"service": "api"})
+
+
 def test_auto_preserves_mixed_input_as_plain_text() -> None:
     text = '{"message":"Permission denied"}\nplain text line'
     assert normalize_input(text) == text
