@@ -75,7 +75,7 @@ def test_send_webhook_signs_payload(monkeypatch) -> None:
     send_webhook({"incident_type": "disk_full"}, "https://example.test/hook", secret="top-secret")
 
     body = opener.request.data
-    signed = f"1700000000.".encode("ascii") + body
+    signed = "1700000000.".encode("ascii") + body
     expected = hmac.new(b"top-secret", signed, hashlib.sha256).hexdigest()
 
     assert opener.request.get_header("X-incidentai-timestamp") == "1700000000"
@@ -92,7 +92,7 @@ def test_send_webhook_uses_environment_secret(monkeypatch) -> None:
     send_webhook({"incident_type": "oom"}, "https://example.test/hook")
 
     body = opener.request.data
-    signed = f"1700000001.".encode("ascii") + body
+    signed = "1700000001.".encode("ascii") + body
     expected = hmac.new(b"env-secret", signed, hashlib.sha256).hexdigest()
 
     assert opener.request.get_header("X-incidentai-signature") == f"sha256={expected}"
