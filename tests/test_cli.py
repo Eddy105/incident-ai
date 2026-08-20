@@ -223,3 +223,34 @@ def test_cli_redacts_grouped_sarif_output(tmp_path: Path, capsys) -> None:
     serialized = json.dumps(payload)
     assert "10.0.0.5" not in serialized
     assert "super-secret-value" not in serialized
+
+
+def test_cli_webhook_requires_redaction(tmp_path: Path) -> None:
+    log = tmp_path / "app.log"
+    log.write_text("Permission denied", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["analyze", str(log), "--webhook", "https://example.test/incidents"])
+
+    assert exc_info.value.code == 2
+
+
+def test_cli_webhook_sends_redacted_structured_analysis(tmp_path: Path, monkeypatch) -> None:
+    log = tmp_path / "app.log"
+    log.write_text("Permission denied from 10.0.0.5 token=super-secret-value", encoding="utf-8")
+    captured = {}
+
+    def fake_send(payload, url):
+        captured["payload"] = payload
+        captured["url"] = url
+
+    monkeypatch.setattr("incident_ai.cli.send_webhook", fake_send)
+
+    code = main(["analyze", str(log), "--redact", "--webhook", "https://example.test/incidents"])
+
+    assert code == 1
+    assert captured["url"] == "https://example.test/incidents"
+    serialized = json.dumps(captured["payload"])
+    assert "10.0.0.5" not in serialized
+    assert "super-secret-value" not in serialized
+    assert captured["payload"]["incident_type"] == "permission_denied"
