@@ -39,6 +39,52 @@ def format_json_grouped(
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
 
 
+def _sarif_level(severity: str) -> str:
+    return {"critical": "error", "warning": "warning", "info": "note"}[severity]
+
+
+def _sarif_result(analysis: IncidentAnalysis) -> dict[str, object]:
+    return {
+        "ruleId": analysis.incident_type,
+        "level": _sarif_level(analysis.severity),
+        "message": {"text": analysis.probable_cause},
+        "properties": {
+            "title": analysis.title,
+            "severity": analysis.severity,
+            "confidence": analysis.confidence,
+            "evidence": list(analysis.evidence),
+            "checks": list(analysis.checks),
+            "recommendedActions": list(analysis.recommended_actions),
+        },
+    }
+
+
+def format_sarif(analyses: tuple[IncidentAnalysis, ...], *, tool_name: str = "IncidentAI") -> str:
+    rules: dict[str, dict[str, object]] = {}
+    for analysis in analyses:
+        rules.setdefault(
+            analysis.incident_type,
+            {
+                "id": analysis.incident_type,
+                "name": analysis.title,
+                "shortDescription": {"text": analysis.title},
+                "help": {"text": analysis.probable_cause},
+            },
+        )
+
+    payload = {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {"driver": {"name": tool_name, "rules": list(rules.values())}},
+                "results": [_sarif_result(analysis) for analysis in analyses],
+            }
+        ],
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
 def format_text(analysis: IncidentAnalysis) -> str:
     lines = [
         "INCIDENTAI",
