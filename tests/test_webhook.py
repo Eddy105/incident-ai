@@ -17,20 +17,45 @@ class _Response:
         return False
 
 
+class _Opener:
+    def __init__(self, response=None, error=None) -> None:
+        self.response = response
+        self.error = error
+        self.request = None
+        self.timeout = None
+
+    def open(self, request, timeout):
+        self.request = request
+        self.timeout = timeout
+        if self.error:
+            raise self.error
+        return self.response
+
+
+def _public_dns(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "incident_ai.webhook.socket.getaddrinfo",
+        lambda *_args, **_kwargs: [(2, 1, 6, "", ("93.184.216.34", 443))],
+    )
+
+
 def test_send_webhook_posts_json(monkeypatch) -> None:
+    _public_dns(monkeypatch)
     captured = {}
+    opener = _Opener(_Response())
 
-    def fake_urlopen(request, timeout):
-        captured["url"] = request.full_url
-        captured["body"] = request.data
-        captured["content_type"] = request.get_header("Content-type")
-        captured["user_agent"] = request.get_header("User-agent")
-        captured["timeout"] = timeout
-        return _Response()
+    def fake_build_opener(*_handlers):
+        return opener
 
-    monkeypatch.setattr("incident_ai.webhook.urlopen", fake_urlopen)
+    monkeypatch.setattr("incident_ai.webhook.build_opener", fake_build_opener)
 
     send_webhook({"incident_type": "disk_full"}, "https://example.test/hook", timeout=3.5)
+
+    captured["url"] = opener.request.full_url
+    captured["body"] = opener.request.data
+    captured["content_type"] = opener.request.get_header("Content-type")
+    captured["user_agent"] = opener.request.get_header("User-agent")
+    captured["timeout"] = opener.timeout
 
     assert captured["url"] == "https://example.test/hook"
     assert json.loads(captured["body"]) == {"incident_type": "disk_full"}
@@ -44,11 +69,36 @@ def test_send_webhook_rejects_non_http_url() -> None:
         send_webhook({}, "file:///tmp/incident.json")
 
 
-def test_send_webhook_reports_http_errors(monkeypatch) -> None:
-    def fake_urlopen(*_args, **_kwargs):
-        raise HTTPError("https://example.test/hook", 500, "server error", {}, None)
+def test_send_webhook_rejects_private_destination(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "incident_ai.webhook.socket.getaddrinfo",
+        lambda *_args, **_kwargs: [(2, 1, 6, "", ("127.0.0.1", 80))],
+    )
 
-    monkeypatch.setattr("incident_ai.webhook.urlopen", fake_urlopen)
+    with pytest.raises(WebhookError, match="public IP"):
+        send_webhook({}, "http://localhost/hook")
+
+
+def test_send_webhook_rejects_embedded_credentials(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+
+    with pytest.raises(WebhookError, match="embedded credentials"):
+        send_webhook({}, "https://user:secret@example.test/hook")
+
+
+def test_send_webhook_rejects_redirects(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    opener = _Opener(error=HTTPError("https://example.test/hook", 302, "redirect", {}, None))
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: opener)
+
+    with pytest.raises(WebhookError, match="redirects are not allowed"):
+        send_webhook({}, "https://example.test/hook")
+
+
+def test_send_webhook_reports_http_errors(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    opener = _Opener(error=HTTPError("https://example.test/hook", 500, "server error", {}, None))
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: opener)
 
     with pytest.raises(WebhookError, match="HTTP 500"):
         send_webhook({}, "https://example.test/hook")

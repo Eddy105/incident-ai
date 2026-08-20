@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented here.
 
+## [0.10.1] - 2026-08-20
+
+### Security
+
+- Reject webhook destinations that resolve to non-public IP addresses to reduce SSRF risk
+- Reject webhook URLs containing embedded credentials
+- Disable automatic HTTP(S) redirects for webhook delivery
+- Add regression coverage for private destinations, credentials, and redirects
+
 ## [0.10.0] - 2026-08-20
 
 ### Added
