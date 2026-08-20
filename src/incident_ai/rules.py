@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Pattern
 
 from .models import Severity
 
@@ -13,13 +12,13 @@ class Rule:
     title: str
     severity: Severity
     confidence: float
-    patterns: tuple[Pattern[str], ...]
+    patterns: tuple[re.Pattern[str], ...]
     probable_cause: str
     checks: tuple[str, ...]
     recommended_actions: tuple[str, ...]
 
 
-def _rx(pattern: str) -> Pattern[str]:
+def _rx(pattern: str) -> re.Pattern[str]:
     return re.compile(pattern, re.IGNORECASE | re.MULTILINE)
 
 
