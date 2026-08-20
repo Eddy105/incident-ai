@@ -4,7 +4,7 @@ import json
 from dataclasses import replace
 
 from .models import IncidentAnalysis
-from .redaction import redact_text
+from .redaction import redact_analysis
 
 
 class EnrichmentError(RuntimeError):
@@ -12,16 +12,17 @@ class EnrichmentError(RuntimeError):
 
 
 def build_enrichment_input(analysis: IncidentAnalysis) -> str:
-    """Build a minimal redacted payload; raw logs are never sent by this function."""
+    """Build a fully redacted payload; raw incident data never leaves this boundary."""
+    safe_analysis = redact_analysis(analysis)
     payload = {
-        "incident_type": analysis.incident_type,
-        "title": analysis.title,
-        "severity": analysis.severity,
-        "confidence": analysis.confidence,
-        "probable_cause": analysis.probable_cause,
-        "evidence": [redact_text(item) for item in analysis.evidence],
-        "checks": list(analysis.checks),
-        "recommended_actions": list(analysis.recommended_actions),
+        "incident_type": safe_analysis.incident_type,
+        "title": safe_analysis.title,
+        "severity": safe_analysis.severity,
+        "confidence": safe_analysis.confidence,
+        "probable_cause": safe_analysis.probable_cause,
+        "evidence": list(safe_analysis.evidence),
+        "checks": list(safe_analysis.checks),
+        "recommended_actions": list(safe_analysis.recommended_actions),
     }
     return json.dumps(payload, ensure_ascii=False)
 
