@@ -12,8 +12,8 @@ def _rx(pattern: str) -> re.Pattern[str]:
 # create an incident by itself.
 CORROBORATING_SIGNALS: dict[str, tuple[re.Pattern[str], ...]] = {
     "disk_full": (
-        _rx(r"filesystem .*\b100%\b"),
-        _rx(r"inode(?:s)? .*\b100%\b"),
+        _rx(r"filesystem .*100%"),
+        _rx(r"inode(?:s)? .*100%"),
     ),
     "oom_kill": (
         _rx(r"memory cgroup out of memory"),
