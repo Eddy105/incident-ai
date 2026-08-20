@@ -73,6 +73,33 @@ def test_cli_include_context_keeps_journald_metadata_in_evidence(tmp_path: Path,
     assert payload["evidence"] == ["[host=web-01 unit=worker.service pid=42] No space left on device"]
 
 
+def test_cli_filters_structured_logs_by_source(tmp_path: Path, capsys) -> None:
+    log = tmp_path / "cluster.jsonl"
+    log.write_text(
+        '{"MESSAGE":"No space left on device","_HOSTNAME":"web-01","_SYSTEMD_UNIT":"api.service"}\n'
+        '{"MESSAGE":"Permission denied","_HOSTNAME":"web-02","_SYSTEMD_UNIT":"api.service"}',
+        encoding="utf-8",
+    )
+
+    code = main(["analyze", str(log), "--host", "web-02", "--unit", "api.service", "--json", "--include-context"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert payload["incident_type"] == "permission_denied"
+    assert payload["evidence"] == ["[host=web-02 unit=api.service] Permission denied"]
+
+
+def test_cli_source_filter_without_match_returns_empty_input(tmp_path: Path, capsys) -> None:
+    log = tmp_path / "cluster.jsonl"
+    log.write_text('{"MESSAGE":"Permission denied","_HOSTNAME":"web-01"}', encoding="utf-8")
+
+    code = main(["analyze", str(log), "--host", "web-99", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["incident_type"] == "empty_input"
+
+
 def test_cli_jsonl_reports_malformed_input(tmp_path: Path) -> None:
     log = tmp_path / "broken.jsonl"
     log.write_text('{"message":"Permission denied"}\nnot-json', encoding="utf-8")

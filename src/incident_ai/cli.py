@@ -48,6 +48,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Preserve host, service, unit, container, and PID metadata from structured JSON Lines in evidence.",
     )
+    analyze.add_argument("--host", help="Analyze only JSON Lines records from this host.")
+    analyze.add_argument("--service", help="Analyze only JSON Lines records from this service/application.")
+    analyze.add_argument("--unit", help="Analyze only JSON Lines records from this systemd unit.")
+    analyze.add_argument("--container", help="Analyze only JSON Lines records from this container.")
     analyze.add_argument(
         "--enrich",
         action="store_true",
@@ -79,9 +83,25 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    source_filters = {
+        key: value
+        for key, value in {
+            "host": args.host,
+            "service": args.service,
+            "unit": args.unit,
+            "container": args.container,
+        }.items()
+        if value
+    }
+
     try:
         text = _read_source(args.source)
-        text = normalize_input(text, args.input_format, include_context=args.include_context)
+        text = normalize_input(
+            text,
+            args.input_format,
+            include_context=args.include_context,
+            source_filters=source_filters,
+        )
     except OSError as exc:
         parser.exit(3, f"incident-ai: unable to read {args.source!r}: {exc}\n")
     except InputFormatError as exc:

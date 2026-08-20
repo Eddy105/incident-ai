@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented here.
 
+## [0.6.0] - 2026-08-20
+
+### Added
+
+- Source-scoped structured analysis with `--host`, `--service`, `--unit`, and `--container`
+- Filtering across journald, container, and generic application metadata before incident analysis and confidence correlation
+- Safe validation that rejects source filters for plain-text or malformed mixed input instead of silently applying them
+
+### Fixed
+
+- Runtime `incident-ai --version` now stays aligned with the package version
+
 ## [0.5.0] - 2026-08-20
 
 ### Added
