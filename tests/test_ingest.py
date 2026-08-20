@@ -1,6 +1,6 @@
 import pytest
 
-from incident_ai.ingest import InputFormatError, normalize_input
+from incident_ai.ingest import InputFormatError, normalize_grouped_input, normalize_input
 
 
 def test_auto_extracts_messages_from_json_lines() -> None:
@@ -59,13 +59,49 @@ def test_source_filters_support_generic_application_fields() -> None:
 
 
 def test_source_filters_require_structured_input() -> None:
-    with pytest.raises(InputFormatError, match="source filters require JSON Lines input"):
+    with pytest.raises(InputFormatError, match="structured grouping and source filters require JSON Lines input"):
         normalize_input("Permission denied", "text", source_filters={"host": "web-01"})
 
 
 def test_auto_with_source_filters_rejects_mixed_input() -> None:
     with pytest.raises(InputFormatError, match="invalid JSON on line 2"):
         normalize_input('{"message":"Permission denied"}\nplain text line', source_filters={"service": "api"})
+
+
+def test_grouped_input_partitions_records_by_host() -> None:
+    text = (
+        '{"MESSAGE":"No space left on device","_HOSTNAME":"web-01"}\n'
+        '{"MESSAGE":"filesystem /var 100%","_HOSTNAME":"web-02"}\n'
+        '{"MESSAGE":"Permission denied","_HOSTNAME":"web-01"}'
+    )
+
+    grouped = normalize_grouped_input(text, "host", include_context=True)
+
+    assert grouped == {
+        "web-01": "[host=web-01] No space left on device\n[host=web-01] Permission denied",
+        "web-02": "[host=web-02] filesystem /var 100%",
+    }
+
+
+def test_grouped_input_keeps_records_without_group_metadata() -> None:
+    grouped = normalize_grouped_input('{"MESSAGE":"Permission denied"}', "service")
+    assert grouped == {"<unknown>": "Permission denied"}
+
+
+def test_grouped_input_applies_source_filters_before_grouping() -> None:
+    text = (
+        '{"MESSAGE":"Permission denied","_HOSTNAME":"web-01","_SYSTEMD_UNIT":"api.service"}\n'
+        '{"MESSAGE":"No space left on device","_HOSTNAME":"web-02","_SYSTEMD_UNIT":"worker.service"}'
+    )
+
+    grouped = normalize_grouped_input(text, "host", source_filters={"unit": "api.service"})
+
+    assert grouped == {"web-01": "Permission denied"}
+
+
+def test_grouped_input_requires_structured_input() -> None:
+    with pytest.raises(InputFormatError, match="structured grouping and source filters require JSON Lines input"):
+        normalize_grouped_input("Permission denied", "host", "text")
 
 
 def test_auto_preserves_mixed_input_as_plain_text() -> None:
