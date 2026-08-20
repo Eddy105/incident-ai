@@ -34,6 +34,7 @@ IncidentAI also provides checks and recommended actions, for example `systemctl 
 - Deterministic, auditable diagnosis rules
 - No network access required for the default analyzer
 - Optional `--redact` output sanitization for common secrets and identifiers
+- Secure opt-in `--webhook` export for redacted incident payloads
 - Optional OpenAI enrichment behind explicit `--enrich` opt-in and local redaction
 - Docker image support
 - Automated linting, test coverage, package builds, Docker builds, and tagged GitHub releases
@@ -115,6 +116,16 @@ incident-ai analyze app.log --json --redact
 
 `--redact` is opt-in for backward compatibility. It sanitizes common email addresses, IP addresses, API keys, tokens, passwords, bearer credentials, and other matching identifiers in exportable analysis fields. It does not modify the source log file.
 
+Send a redacted analysis to an internal webhook:
+
+```bash
+incident-ai analyze app.log --json --redact --webhook https://ops.example.test/incidents
+```
+
+`--webhook` sends only the structured analysis result as a JSON `POST`. It is intentionally restricted to explicit HTTP(S) URLs and requires `--redact` so credentials and common identifiers are not accidentally exported. Webhook delivery failures return exit code `4`; successful delivery does not change the normal incident exit code.
+
+For multiple incidents, the webhook receives a JSON array. With `--group-by`, it receives the same grouped JSON structure used by `--json`.
+
 JSON output:
 
 ```bash
@@ -159,6 +170,7 @@ incident-ai analyze app.log --enrich
 | 1 | Recognized warning-level incident |
 | 2 | Recognized critical incident |
 | 3 | Input/read error |
+| 4 | External enrichment or webhook delivery error |
 
 This makes IncidentAI usable in shell scripts, CI jobs, health checks, and monitoring pipelines.
 
@@ -206,7 +218,7 @@ See [`docs/architecture.md`](docs/architecture.md).
 
 ## Security and privacy
 
-The default analyzer runs entirely locally and does not upload logs. `--redact` provides an explicit sanitization pass for exported/displayed analysis. Optional `--enrich` also redacts evidence before remote processing. Avoid placing credentials, tokens, personal data, or secrets in bug reports. See [`SECURITY.md`](SECURITY.md).
+The default analyzer runs entirely locally and does not upload logs. `--redact` provides an explicit sanitization pass for exported/displayed analysis. `--webhook` requires that sanitization and sends only the resulting structured analysis to the explicitly supplied endpoint. Optional `--enrich` also redacts evidence before remote processing. Avoid placing credentials, tokens, personal data, or secrets in bug reports. See [`SECURITY.md`](SECURITY.md).
 
 ## Roadmap
 
