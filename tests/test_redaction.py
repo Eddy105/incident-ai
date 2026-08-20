@@ -1,6 +1,6 @@
 from incident_ai import analyze_text
 from incident_ai.enrichment import build_enrichment_input
-from incident_ai.redaction import redact_text
+from incident_ai.redaction import redact_analysis, redact_text
 
 
 def test_redacts_common_secrets_and_identifiers() -> None:
@@ -20,3 +20,15 @@ def test_enrichment_payload_uses_only_structured_analysis() -> None:
     assert "10.0.0.5" not in payload
     assert "super-secret-value" not in payload
     assert "permission_denied" in payload
+
+
+def test_redact_analysis_sanitizes_exportable_fields() -> None:
+    analysis = analyze_text(
+        "Permission denied from 10.0.0.5 token=super-secret-value"
+    )
+    sanitized = redact_analysis(analysis)
+
+    assert sanitized.incident_type == analysis.incident_type
+    assert "10.0.0.5" not in " ".join(sanitized.evidence)
+    assert "super-secret-value" not in " ".join(sanitized.evidence)
+    assert analysis.evidence != sanitized.evidence
