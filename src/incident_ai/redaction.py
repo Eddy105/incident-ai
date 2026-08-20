@@ -11,7 +11,7 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
             r"(?i)\b(api[_-]?key|token|password|passwd|secret|authorization)\b"
-            r"\s*[:=]\s*([^\s,;]+)"
+            r"\s*[:=]\s*(?:bearer\s+)?([^\s,;]+)"
         ),
         r"\1=<REDACTED>",
     ),

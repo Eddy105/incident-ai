@@ -8,4 +8,4 @@ Please report security-sensitive defects privately to the repository owner rathe
 
 IncidentAI's default analyzer is offline and does not transmit input. Users remain responsible for protecting log files, which can contain credentials, tokens, private addresses, usernames, request parameters, or personal data.
 
-Future remote enrichment providers must be explicit opt-ins and should apply redaction before sending selected context outside the local machine.
+Remote enrichment is an explicit opt-in. Before any selected incident context reaches an enrichment provider, IncidentAI applies its redaction pipeline to titles, probable causes, evidence, checks, and recommended actions. The local analyzer never sends raw logs to the provider.
