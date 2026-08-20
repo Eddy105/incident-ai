@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented here.
 
+## [0.9.0] - 2026-08-20
+
+### Added
+
+- Opt-in `--redact` output sanitization for common secrets and identifiers
+- Redaction of evidence, causes, checks, recommended actions, and enrichment text before display/export
+- Regression coverage for direct, grouped, JSON, and SARIF redacted output
+
+### Fixed
+
+- Package metadata version is now synchronized with the runtime version at 0.9.0
+
 ## [0.8.0] - 2026-08-20
 
 ### Added

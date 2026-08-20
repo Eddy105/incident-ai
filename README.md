@@ -33,6 +33,7 @@ IncidentAI also provides checks and recommended actions, for example `systemctl 
 - Optional host, service, systemd unit, container, and PID context in structured-log evidence
 - Deterministic, auditable diagnosis rules
 - No network access required for the default analyzer
+- Optional `--redact` output sanitization for common secrets and identifiers
 - Optional OpenAI enrichment behind explicit `--enrich` opt-in and local redaction
 - Docker image support
 - Automated linting, test coverage, package builds, Docker builds, and tagged GitHub releases
@@ -106,6 +107,14 @@ Analyze each source independently before correlation:
 journalctl -o json --since '-10 min' | incident-ai analyze - --group-by host --all --json
 ```
 
+Redact common secrets and identifiers before displaying or exporting the diagnosis:
+
+```bash
+incident-ai analyze app.log --json --redact
+```
+
+`--redact` is opt-in for backward compatibility. It sanitizes common email addresses, IP addresses, API keys, tokens, passwords, bearer credentials, and other matching identifiers in exportable analysis fields. It does not modify the source log file.
+
 JSON output:
 
 ```bash
@@ -130,7 +139,7 @@ For multiple incidents:
 incident-ai analyze app.log --all --sarif > results.sarif
 ```
 
-`--sarif` emits one SARIF result per detected incident and preserves severity, confidence, evidence, verification checks, and recommended actions as result properties. Source-grouped analyses are flattened into one SARIF run because SARIF already provides a single result stream suitable for CI ingestion.
+`--sarif` emits one SARIF result per detected incident and preserves severity, confidence, evidence, verification checks, and recommended actions as result properties. Source-grouped analyses are flattened into one SARIF run because SARIF already provides a single result stream suitable for CI ingestion. Combine it with `--redact` when SARIF output may leave a trusted environment.
 
 Optional AI enrichment:
 
@@ -197,7 +206,7 @@ See [`docs/architecture.md`](docs/architecture.md).
 
 ## Security and privacy
 
-The default analyzer runs entirely locally and does not upload logs. Avoid placing credentials, tokens, personal data, or secrets in bug reports. See [`SECURITY.md`](SECURITY.md).
+The default analyzer runs entirely locally and does not upload logs. `--redact` provides an explicit sanitization pass for exported/displayed analysis. Optional `--enrich` also redacts evidence before remote processing. Avoid placing credentials, tokens, personal data, or secrets in bug reports. See [`SECURITY.md`](SECURITY.md).
 
 ## Roadmap
 

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
+
+from .models import IncidentAnalysis
 
 _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "<EMAIL>"),
@@ -23,3 +26,16 @@ def redact_text(text: str) -> str:
     for pattern, replacement in _PATTERNS:
         redacted = pattern.sub(replacement, redacted)
     return redacted
+
+
+def redact_analysis(analysis: IncidentAnalysis) -> IncidentAnalysis:
+    """Return a sanitized copy suitable for displaying or exporting to untrusted sinks."""
+    return replace(
+        analysis,
+        title=redact_text(analysis.title),
+        probable_cause=redact_text(analysis.probable_cause),
+        evidence=tuple(redact_text(item) for item in analysis.evidence),
+        checks=tuple(redact_text(item) for item in analysis.checks),
+        recommended_actions=tuple(redact_text(item) for item in analysis.recommended_actions),
+        enrichment=redact_text(analysis.enrichment) if analysis.enrichment is not None else None,
+    )

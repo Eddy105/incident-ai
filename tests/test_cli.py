@@ -193,3 +193,33 @@ def test_cli_unknown_exit_code_is_zero(tmp_path: Path) -> None:
     log = tmp_path / "app.log"
     log.write_text("unclassified signal", encoding="utf-8")
     assert main(["analyze", str(log)]) == 0
+
+
+def test_cli_redacts_output_without_changing_exit_code(tmp_path: Path, capsys) -> None:
+    log = tmp_path / "app.log"
+    log.write_text("Permission denied from 10.0.0.5 token=super-secret-value", encoding="utf-8")
+
+    code = main(["analyze", str(log), "--json", "--redact"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert "10.0.0.5" not in json.dumps(payload)
+    assert "super-secret-value" not in json.dumps(payload)
+    assert "<IP>" in payload["evidence"][0]
+    assert "<REDACTED>" in payload["evidence"][0]
+
+
+def test_cli_redacts_grouped_sarif_output(tmp_path: Path, capsys) -> None:
+    log = tmp_path / "cluster.jsonl"
+    log.write_text(
+        '{"MESSAGE":"Permission denied from 10.0.0.5 token=super-secret-value","_HOSTNAME":"web-01"}',
+        encoding="utf-8",
+    )
+
+    code = main(["analyze", str(log), "--group-by", "host", "--sarif", "--redact"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    serialized = json.dumps(payload)
+    assert "10.0.0.5" not in serialized
+    assert "super-secret-value" not in serialized

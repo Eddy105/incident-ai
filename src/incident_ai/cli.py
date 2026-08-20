@@ -17,6 +17,7 @@ from .formatters import (
     format_text_many,
 )
 from .ingest import InputFormatError, normalize_grouped_input, normalize_input
+from .redaction import redact_analysis
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -71,6 +72,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Analyze structured records independently per source field to prevent cross-source correlation.",
     )
     analyze.add_argument(
+        "--redact",
+        action="store_true",
+        help="Redact common secrets and identifiers from analysis output before exporting or displaying it.",
+    )
+    analyze.add_argument(
         "--enrich",
         action="store_true",
         help="Opt in to remote OpenAI enrichment after local analysis and redaction.",
@@ -101,6 +107,10 @@ def _maybe_enrich_many(analyses, *, enabled: bool, model: str):
     if not enabled:
         return analyses
     return tuple(enrich_with_openai(item, model=model) for item in analyses)
+
+
+def _maybe_redact(analysis: object, *, enabled: bool):
+    return redact_analysis(analysis) if enabled else analysis
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -149,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
             for value, group_text in grouped_text.items():
                 analyses = analyze_all(group_text) if args.all else (analyze_text(group_text),)
                 analyses = _maybe_enrich_many(analyses, enabled=args.enrich, model=args.model)
+                analyses = tuple(_maybe_redact(item, enabled=args.redact) for item in analyses)
                 grouped_analyses.append((value, analyses))
         except EnrichmentError as exc:
             parser.exit(4, f"incident-ai: {exc}\n")
@@ -171,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
             analyses = _maybe_enrich_many(analyses, enabled=args.enrich, model=args.model)
         except EnrichmentError as exc:
             parser.exit(4, f"incident-ai: {exc}\n")
+        analyses = tuple(_maybe_redact(item, enabled=args.redact) for item in analyses)
 
         if args.sarif:
             print(format_sarif(analyses))
@@ -186,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
             analysis = enrich_with_openai(analysis, model=args.model)
         except EnrichmentError as exc:
             parser.exit(4, f"incident-ai: {exc}\n")
+    analysis = _maybe_redact(analysis, enabled=args.redact)
 
     if args.sarif:
         print(format_sarif((analysis,)))
