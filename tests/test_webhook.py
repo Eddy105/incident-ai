@@ -43,64 +43,49 @@ def _public_dns(monkeypatch) -> None:
 
 def test_send_webhook_posts_json(monkeypatch) -> None:
     _public_dns(monkeypatch)
-    captured = {}
     opener = _Opener(_Response())
-
-    def fake_build_opener(*_handlers):
-        return opener
-
-    monkeypatch.setattr("incident_ai.webhook.build_opener", fake_build_opener)
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: opener)
 
     send_webhook({"incident_type": "disk_full"}, "https://example.test/hook", timeout=3.5)
 
-    captured["url"] = opener.request.full_url
-    captured["body"] = opener.request.data
-    captured["content_type"] = opener.request.get_header("Content-type")
-    captured["user_agent"] = opener.request.get_header("User-agent")
-    captured["event_id"] = opener.request.get_header("X-incidentai-event-id")
-    captured["timeout"] = opener.timeout
-
-    assert captured["url"] == "https://example.test/hook"
-    assert json.loads(captured["body"]) == {"incident_type": "disk_full"}
-    assert captured["content_type"] == "application/json"
-    assert captured["user_agent"] == "IncidentAI/0.11"
-    assert captured["event_id"] == hashlib.sha256(captured["body"]).hexdigest()
-    assert captured["timeout"] == 3.5
+    body = opener.request.data
+    assert opener.request.full_url == "https://example.test/hook"
+    assert json.loads(body) == {"incident_type": "disk_full"}
+    assert opener.request.get_header("Content-type") == "application/json"
+    assert opener.request.get_header("User-agent") == "IncidentAI/0.11"
+    assert opener.request.get_header("X-incidentai-event-id") == hashlib.sha256(body).hexdigest()
+    assert opener.timeout == 3.5
 
 
 def test_send_webhook_event_id_is_stable_for_same_payload(monkeypatch) -> None:
     _public_dns(monkeypatch)
-    openers = [_Opener(_Response()), _Opener(_Response())]
-    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: openers.pop(0))
-
     first = _Opener(_Response())
     second = _Opener(_Response())
-    openers.extend([first, second])
+    openers = iter((first, second))
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: next(openers))
 
-    send_webhook({"incident_type": "oom", "fingerprint": "abc123"}, "https://example.test/hook")
-    first_id = openers[0].request.get_header("X-incidentai-event-id") if openers[0].request else None
+    payload = {"incident_type": "oom", "fingerprint": "abc123"}
+    send_webhook(payload, "https://example.test/hook")
+    send_webhook(payload, "https://example.test/hook")
 
-    send_webhook({"incident_type": "oom", "fingerprint": "abc123"}, "https://example.test/hook")
-    second_id = openers[1].request.get_header("X-incidentai-event-id") if openers[1].request else None
-
+    first_id = first.request.get_header("X-incidentai-event-id")
+    second_id = second.request.get_header("X-incidentai-event-id")
     assert first_id is not None
     assert first_id == second_id
 
 
 def test_send_webhook_event_id_changes_with_payload(monkeypatch) -> None:
     _public_dns(monkeypatch)
-    openers = [_Opener(_Response()), _Opener(_Response())]
-    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: openers.pop(0))
+    first = _Opener(_Response())
+    second = _Opener(_Response())
+    openers = iter((first, second))
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: next(openers))
 
-    first = openers[0]
-    openers.append(first)
     send_webhook({"incident_type": "oom"}, "https://example.test/hook")
-    first_id = first.request.get_header("X-incidentai-event-id")
-
-    second = openers[0]
     send_webhook({"incident_type": "disk_full"}, "https://example.test/hook")
-    second_id = second.request.get_header("X-incidentai-event-id")
 
+    first_id = first.request.get_header("X-incidentai-event-id")
+    second_id = second.request.get_header("X-incidentai-event-id")
     assert first_id != second_id
 
 
