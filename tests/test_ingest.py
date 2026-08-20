@@ -14,6 +14,25 @@ def test_auto_extracts_messages_from_json_lines() -> None:
     assert normalized == "No space left on device\nCould not resolve host: api.internal"
 
 
+def test_auto_can_preserve_structured_source_context() -> None:
+    text = (
+        '{"MESSAGE":"No space left on device","_HOSTNAME":"web-01","_SYSTEMD_UNIT":"worker.service","_PID":"42"}\n'
+        '{"message":"Could not resolve host: api.internal","service":"api","container_name":"api-1"}'
+    )
+
+    normalized = normalize_input(text, include_context=True)
+
+    assert normalized == (
+        "[host=web-01 unit=worker.service pid=42] No space left on device\n"
+        "[service=api container=api-1] Could not resolve host: api.internal"
+    )
+
+
+def test_context_prefers_journald_identifiers_over_generic_fields() -> None:
+    text = '{"MESSAGE":"Permission denied","SYSLOG_IDENTIFIER":"nginx","service":"fallback"}'
+    assert normalize_input(text, "jsonl", include_context=True) == "[service=nginx] Permission denied"
+
+
 def test_auto_preserves_mixed_input_as_plain_text() -> None:
     text = '{"message":"Permission denied"}\nplain text line'
     assert normalize_input(text) == text

@@ -44,6 +44,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Input format: auto-detect JSON Lines, force plain text, or require JSON Lines (default: auto).",
     )
     analyze.add_argument(
+        "--include-context",
+        action="store_true",
+        help="Preserve host, service, unit, container, and PID metadata from structured JSON Lines in evidence.",
+    )
+    analyze.add_argument(
         "--enrich",
         action="store_true",
         help="Opt in to remote OpenAI enrichment after local analysis and redaction.",
@@ -76,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         text = _read_source(args.source)
-        text = normalize_input(text, args.input_format)
+        text = normalize_input(text, args.input_format, include_context=args.include_context)
     except OSError as exc:
         parser.exit(3, f"incident-ai: unable to read {args.source!r}: {exc}\n")
     except InputFormatError as exc:

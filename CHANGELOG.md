@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented here.
 
+## [0.4.0] - 2026-08-20
+
+### Added
+
+- Optional structured source context preservation with `--include-context`
+- Host, service, systemd unit, container, and PID metadata in incident evidence for JSON Lines input
+- Context extraction for common journald, container, and application-log field names while keeping default normalized output backward compatible
+
 ## [0.3.0] - 2026-08-20
 
 ### Added
