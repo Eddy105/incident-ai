@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from incident_ai.cli import main
@@ -12,6 +13,32 @@ def test_cli_json_output(tmp_path: Path, capsys) -> None:
 
     assert code == 1
     assert '"incident_type": "permission_denied"' in captured.out
+
+
+def test_cli_all_json_output(tmp_path: Path, capsys) -> None:
+    log = tmp_path / "app.log"
+    log.write_text(
+        "No space left on device\nCould not resolve host: api.internal",
+        encoding="utf-8",
+    )
+
+    code = main(["analyze", str(log), "--all", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 2
+    assert [item["incident_type"] for item in payload] == ["disk_full", "dns_failure"]
+
+
+def test_cli_all_preserves_single_incident_shape_as_list(tmp_path: Path, capsys) -> None:
+    log = tmp_path / "app.log"
+    log.write_text("Permission denied", encoding="utf-8")
+
+    code = main(["analyze", str(log), "--all", "--compact"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert len(payload) == 1
+    assert payload[0]["incident_type"] == "permission_denied"
 
 
 def test_cli_critical_exit_code(tmp_path: Path) -> None:
