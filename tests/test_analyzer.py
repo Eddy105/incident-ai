@@ -34,6 +34,38 @@ def test_analyze_all_returns_distinct_incidents_by_confidence() -> None:
     assert len(analyses[0].evidence) == 2
 
 
+def test_corroborating_oom_signal_raises_confidence() -> None:
+    baseline = analyze_text("Killed process 123 (worker) total-vm:123456kB")
+    corroborated = analyze_text(
+        "memory cgroup out of memory\n"
+        "Killed process 123 (worker) total-vm:123456kB"
+    )
+
+    assert baseline.incident_type == "oom_kill"
+    assert baseline.confidence == 0.98
+    assert corroborated.incident_type == "oom_kill"
+    assert corroborated.confidence == 0.99
+
+
+def test_corroborating_signals_do_not_create_an_incident_without_primary_match() -> None:
+    analysis = analyze_text("memory cgroup out of memory")
+
+    assert analysis.incident_type == "unknown"
+    assert analysis.confidence == 0.20
+
+
+def test_corroborating_confidence_is_capped() -> None:
+    analysis = analyze_text(
+        "memory cgroup out of memory\n"
+        "oom_reaper: reaped process 123\n"
+        "memory pressure is critical\n"
+        "Killed process 123 (worker) total-vm:123456kB"
+    )
+
+    assert analysis.incident_type == "oom_kill"
+    assert analysis.confidence == 0.99
+
+
 def test_unknown_input_is_safe() -> None:
     analysis = analyze_text("some completely novel operational failure")
     assert analysis.incident_type == "unknown"

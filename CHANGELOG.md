@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented here.
 
+## [0.5.0] - 2026-08-20
+
+### Added
+
+- Correlated confidence scoring that raises confidence only after a primary incident signature matches
+- Independent corroborating signals for disk exhaustion, OOM kills, Nginx upstream failures, DNS failures, and TLS certificate failures
+- A 99% confidence cap so additional context strengthens a diagnosis without presenting deterministic certainty
+
 ## [0.4.0] - 2026-08-20
 
 ### Added
