@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented here.
 
+## [0.8.0] - 2026-08-20
+
+### Added
+
+- SARIF 2.1.0 output with `--sarif` for CI and security tooling
+- SARIF rule metadata, severity levels, confidence, evidence, verification checks, and recommended actions
+- SARIF support for single, multi-incident, and source-grouped analysis results
+- Regression coverage for SARIF structure and grouped-result flattening
+
 ## [0.7.0] - 2026-08-20
 
 ### Added
