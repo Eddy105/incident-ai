@@ -11,6 +11,7 @@ from .formatters import (
     format_json,
     format_json_grouped,
     format_json_many,
+    format_sarif,
     format_text,
     format_text_grouped,
     format_text_many,
@@ -38,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--compact",
         action="store_true",
         help="Emit compact JSON. Implies --json.",
+    )
+    analyze.add_argument(
+        "--sarif",
+        action="store_true",
+        help="Emit SARIF 2.1.0 for CI and security tooling.",
     )
     analyze.add_argument(
         "--all",
@@ -112,6 +118,9 @@ def main(argv: list[str] | None = None) -> int:
         if value
     }
 
+    if args.sarif and args.compact:
+        parser.error("--sarif cannot be combined with --compact")
+
     try:
         raw_text = _read_source(args.source)
         if args.group_by:
@@ -145,7 +154,9 @@ def main(argv: list[str] | None = None) -> int:
             parser.exit(4, f"incident-ai: {exc}\n")
 
         groups = tuple(grouped_analyses)
-        if args.json or args.compact:
+        if args.sarif:
+            print(format_sarif(tuple(item for _value, analyses in groups for item in analyses)))
+        elif args.json or args.compact:
             print(format_json_grouped(groups, group_by=args.group_by, pretty=not args.compact))
         else:
             print(format_text_grouped(groups, group_by=args.group_by))
@@ -161,7 +172,9 @@ def main(argv: list[str] | None = None) -> int:
         except EnrichmentError as exc:
             parser.exit(4, f"incident-ai: {exc}\n")
 
-        if args.json or args.compact:
+        if args.sarif:
+            print(format_sarif(analyses))
+        elif args.json or args.compact:
             print(format_json_many(analyses, pretty=not args.compact))
         else:
             print(format_text_many(analyses))
@@ -174,7 +187,9 @@ def main(argv: list[str] | None = None) -> int:
         except EnrichmentError as exc:
             parser.exit(4, f"incident-ai: {exc}\n")
 
-    if args.json or args.compact:
+    if args.sarif:
+        print(format_sarif((analysis,)))
+    elif args.json or args.compact:
         print(format_json(analysis, pretty=not args.compact))
     else:
         print(format_text(analysis))
