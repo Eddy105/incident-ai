@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 from urllib.error import HTTPError
+from urllib.error import URLError
 
 import pytest
 
@@ -167,8 +168,42 @@ def test_send_webhook_rejects_redirects(monkeypatch) -> None:
 
 def test_send_webhook_reports_http_errors(monkeypatch) -> None:
     _public_dns(monkeypatch)
-    opener = _Opener(error=HTTPError("https://example.test/hook", 500, "server error", {}, None))
+    opener = _Opener(error=HTTPError("https://example.test/hook", 400, "bad request", {}, None))
     monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: opener)
 
-    with pytest.raises(WebhookError, match="HTTP 500"):
+    with pytest.raises(WebhookError, match="HTTP 400"):
         send_webhook({}, "https://example.test/hook")
+
+
+def test_send_webhook_retries_transient_http_errors(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    first = _Opener(error=HTTPError("https://example.test/hook", 503, "unavailable", {}, None))
+    second = _Opener(_Response())
+    openers = iter((first, second))
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: next(openers))
+    sleeps = []
+    monkeypatch.setattr("incident_ai.webhook.time.sleep", sleeps.append)
+
+    send_webhook({"incident_type": "disk_full"}, "https://example.test/hook", max_retries=1)
+
+    assert sleeps == [0.5]
+    assert first.request.get_header("X-incidentai-event-id") == second.request.get_header("X-incidentai-event-id")
+
+
+def test_send_webhook_retries_network_errors(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    first = _Opener(error=URLError("temporary network failure"))
+    second = _Opener(_Response())
+    openers = iter((first, second))
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: next(openers))
+    sleeps = []
+    monkeypatch.setattr("incident_ai.webhook.time.sleep", sleeps.append)
+
+    send_webhook({"incident_type": "oom"}, "https://example.test/hook", max_retries=2)
+
+    assert sleeps == [0.5]
+
+
+def test_send_webhook_rejects_negative_retries() -> None:
+    with pytest.raises(WebhookError, match="zero or greater"):
+        send_webhook({}, "https://example.test/hook", max_retries=-1)
