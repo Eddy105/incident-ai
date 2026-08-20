@@ -35,6 +35,7 @@ IncidentAI also provides checks and recommended actions, for example `systemctl 
 - No network access required for the default analyzer
 - Optional `--redact` output sanitization for common secrets and identifiers
 - Secure opt-in `--webhook` export for redacted incident payloads
+- Optional HMAC-SHA256 webhook signatures for authenticated delivery
 - Optional OpenAI enrichment behind explicit `--enrich` opt-in and local redaction
 - Docker image support
 - Automated linting, test coverage, package builds, Docker builds, and tagged GitHub releases
@@ -123,6 +124,13 @@ incident-ai analyze app.log --json --redact --webhook https://ops.example.test/i
 ```
 
 `--webhook` sends only the structured analysis result as a JSON `POST`. It is intentionally restricted to explicit HTTP(S) URLs and requires `--redact` so credentials and common identifiers are not accidentally exported. Webhook delivery failures return exit code `4`; successful delivery does not change the normal incident exit code.
+
+For authenticated webhook delivery, set `INCIDENT_AI_WEBHOOK_SECRET` in the process environment. IncidentAI then adds `X-IncidentAI-Timestamp` and `X-IncidentAI-Signature` headers. The signature is `sha256=HMAC_SHA256(secret, timestamp + "." + raw_request_body)`. The timestamp is included in the signed payload so receivers can reject stale or replayed requests. The secret is never sent as a header or included in the JSON payload.
+
+```bash
+export INCIDENT_AI_WEBHOOK_SECRET='replace-with-a-random-secret'
+incident-ai analyze app.log --json --redact --webhook https://ops.example.test/incidents
+```
 
 For multiple incidents, the webhook receives a JSON array. With `--group-by`, it receives the same grouped JSON structure used by `--json`.
 
@@ -218,11 +226,10 @@ See [`docs/architecture.md`](docs/architecture.md).
 
 ## Security and privacy
 
-The default analyzer runs entirely locally and does not upload logs. `--redact` provides an explicit sanitization pass for exported/displayed analysis. `--webhook` requires that sanitization and sends only the resulting structured analysis to the explicitly supplied endpoint. Optional `--enrich` also redacts evidence before remote processing. Avoid placing credentials, tokens, personal data, or secrets in bug reports. See [`SECURITY.md`](SECURITY.md).
+The default analyzer runs entirely locally and does not upload logs. `--redact` provides an explicit sanitization pass for exported/displayed analysis. `--webhook` requires that sanitization and sends only the resulting structured analysis to the explicitly supplied endpoint. Webhooks can optionally be authenticated with HMAC-SHA256 using `INCIDENT_AI_WEBHOOK_SECRET`; receivers should enforce a short timestamp acceptance window to prevent replay. Optional `--enrich` also redacts evidence before remote processing. Avoid placing credentials, tokens, personal data, or secrets in bug reports. See [`SECURITY.md`](SECURITY.md).
 
 ## Roadmap
 
-- Webhook integrations
 - REST API and small web dashboard
 - ServerWatch integration for automatic incident context
 

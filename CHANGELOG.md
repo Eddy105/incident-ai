@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented here.
 
+## [0.10.2] - 2026-08-20
+
+### Security
+
+- Add optional HMAC-SHA256 authentication for webhook requests via `INCIDENT_AI_WEBHOOK_SECRET`
+- Sign the timestamp and exact request body to support receiver-side replay protection
+- Keep the secret out of headers and JSON payloads
+- Add regression coverage for explicit secrets, environment secrets, and unsigned backward-compatible delivery
+
 ## [0.10.1] - 2026-08-20
 
 ### Security

@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 from urllib.error import HTTPError
 
@@ -62,6 +64,50 @@ def test_send_webhook_posts_json(monkeypatch) -> None:
     assert captured["content_type"] == "application/json"
     assert captured["user_agent"] == "IncidentAI/0.10"
     assert captured["timeout"] == 3.5
+
+
+def test_send_webhook_signs_payload(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    monkeypatch.setattr("incident_ai.webhook.time.time", lambda: 1_700_000_000)
+    opener = _Opener(_Response())
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: opener)
+
+    send_webhook({"incident_type": "disk_full"}, "https://example.test/hook", secret="top-secret")
+
+    body = opener.request.data
+    signed = "1700000000.".encode("ascii") + body
+    expected = hmac.new(b"top-secret", signed, hashlib.sha256).hexdigest()
+
+    assert opener.request.get_header("X-incidentai-timestamp") == "1700000000"
+    assert opener.request.get_header("X-incidentai-signature") == f"sha256={expected}"
+
+
+def test_send_webhook_uses_environment_secret(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    monkeypatch.setenv("INCIDENT_AI_WEBHOOK_SECRET", "env-secret")
+    monkeypatch.setattr("incident_ai.webhook.time.time", lambda: 1_700_000_001)
+    opener = _Opener(_Response())
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: opener)
+
+    send_webhook({"incident_type": "oom"}, "https://example.test/hook")
+
+    body = opener.request.data
+    signed = "1700000001.".encode("ascii") + body
+    expected = hmac.new(b"env-secret", signed, hashlib.sha256).hexdigest()
+
+    assert opener.request.get_header("X-incidentai-signature") == f"sha256={expected}"
+
+
+def test_send_webhook_has_no_signature_without_secret(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    monkeypatch.delenv("INCIDENT_AI_WEBHOOK_SECRET", raising=False)
+    opener = _Opener(_Response())
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: opener)
+
+    send_webhook({"incident_type": "oom"}, "https://example.test/hook")
+
+    assert opener.request.get_header("X-incidentai-signature") is None
+    assert opener.request.get_header("X-incidentai-timestamp") is None
 
 
 def test_send_webhook_rejects_non_http_url() -> None:
