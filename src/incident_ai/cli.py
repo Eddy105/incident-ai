@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from .formatters import (
 )
 from .ingest import InputFormatError, normalize_grouped_input, normalize_input
 from .redaction import redact_analysis
+from .webhook import WebhookError, send_webhook
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -77,6 +79,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Redact common secrets and identifiers from analysis output before exporting or displaying it.",
     )
     analyze.add_argument(
+        "--webhook",
+        help="POST the structured analysis to this explicit HTTP(S) webhook; requires --redact.",
+    )
+    analyze.add_argument(
         "--enrich",
         action="store_true",
         help="Opt in to remote OpenAI enrichment after local analysis and redaction.",
@@ -111,6 +117,17 @@ def _maybe_enrich_many(analyses, *, enabled: bool, model: str):
 
 def _maybe_redact(analysis: object, *, enabled: bool):
     return redact_analysis(analysis) if enabled else analysis
+
+
+def _send_webhook_or_exit(parser: argparse.ArgumentParser, payload: object, url: str | None, *, redact: bool) -> None:
+    if not url:
+        return
+    if not redact:
+        parser.error("--webhook requires --redact to prevent accidental secret disclosure")
+    try:
+        send_webhook(payload, url)
+    except WebhookError as exc:
+        parser.exit(4, f"incident-ai: {exc}\n")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -165,6 +182,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.exit(4, f"incident-ai: {exc}\n")
 
         groups = tuple(grouped_analyses)
+        webhook_payload = json.loads(format_json_grouped(groups, group_by=args.group_by, pretty=False))
+        _send_webhook_or_exit(parser, webhook_payload, args.webhook, redact=args.redact)
         if args.sarif:
             print(format_sarif(tuple(item for _value, analyses in groups for item in analyses)))
         elif args.json or args.compact:
@@ -183,6 +202,8 @@ def main(argv: list[str] | None = None) -> int:
         except EnrichmentError as exc:
             parser.exit(4, f"incident-ai: {exc}\n")
         analyses = tuple(_maybe_redact(item, enabled=args.redact) for item in analyses)
+        webhook_payload = [item.to_dict() for item in analyses]
+        _send_webhook_or_exit(parser, webhook_payload, args.webhook, redact=args.redact)
 
         if args.sarif:
             print(format_sarif(analyses))
@@ -199,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
         except EnrichmentError as exc:
             parser.exit(4, f"incident-ai: {exc}\n")
     analysis = _maybe_redact(analysis, enabled=args.redact)
+    _send_webhook_or_exit(parser, analysis.to_dict(), args.webhook, redact=args.redact)
 
     if args.sarif:
         print(format_sarif((analysis,)))
