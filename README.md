@@ -28,6 +28,8 @@ IncidentAI also provides checks and recommended actions, for example `systemctl 
 - Machine-readable JSON output
 - Stable exit codes for automation
 - Evidence extraction from the supplied log text
+- Structured JSON Lines ingestion for journald, containers, and applications
+- Optional host, service, systemd unit, container, and PID context in structured-log evidence
 - Deterministic, auditable diagnosis rules
 - No network access required for the default analyzer
 - Optional OpenAI enrichment behind explicit `--enrich` opt-in and local redaction
@@ -82,6 +84,14 @@ Analyze stdin:
 ```bash
 journalctl -u nginx --since '-10 min' | incident-ai analyze -
 ```
+
+Analyze journald JSON Lines while preserving source metadata in evidence:
+
+```bash
+journalctl -o json -u nginx --since '-10 min' | incident-ai analyze - --input-format jsonl --include-context
+```
+
+With `--include-context`, recognized metadata is rendered as a compact evidence prefix such as `[host=web-01 service=nginx unit=nginx.service pid=1234]`. The flag is opt-in, so existing normalized JSON Lines output remains unchanged by default.
 
 JSON output:
 
@@ -165,10 +175,7 @@ The default analyzer runs entirely locally and does not upload logs. Avoid placi
 ## Roadmap
 
 - Rule scoring from multiple correlated signals
-- Structured journald / JSON log ingestion
-- Service and host context collectors
-- Optional LLM enrichment provider behind an explicit opt-in
-- Redaction pipeline before any remote enrichment
+- Cross-record service and host context correlation
 - SARIF/webhook integrations
 - REST API and small web dashboard
 - ServerWatch integration for automatic incident context
