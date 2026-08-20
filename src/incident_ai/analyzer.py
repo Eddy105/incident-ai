@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .models import IncidentAnalysis
 from .rules import RULES, Rule
+from .scoring import correlated_confidence
 
 
 def _matching_evidence(text: str, rule: Rule) -> tuple[str, ...]:
@@ -17,12 +18,12 @@ def _matching_evidence(text: str, rule: Rule) -> tuple[str, ...]:
     return tuple(evidence)
 
 
-def _analysis_from_rule(rule: Rule, evidence: tuple[str, ...]) -> IncidentAnalysis:
+def _analysis_from_rule(rule: Rule, evidence: tuple[str, ...], text: str) -> IncidentAnalysis:
     return IncidentAnalysis(
         incident_type=rule.incident_type,
         title=rule.title,
         severity=rule.severity,
-        confidence=rule.confidence,
+        confidence=correlated_confidence(rule.incident_type, rule.confidence, text),
         probable_cause=rule.probable_cause,
         evidence=evidence,
         checks=rule.checks,
@@ -68,7 +69,7 @@ def analyze_all(text: str) -> tuple[IncidentAnalysis, ...]:
         return (_empty_analysis(),)
 
     analyses = [
-        _analysis_from_rule(rule, evidence)
+        _analysis_from_rule(rule, evidence, text)
         for rule in RULES
         if (evidence := _matching_evidence(text, rule))
     ]
