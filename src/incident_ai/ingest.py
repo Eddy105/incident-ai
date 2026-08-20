@@ -4,6 +4,7 @@ import json
 from typing import Literal
 
 InputFormat = Literal["auto", "text", "jsonl"]
+GroupField = Literal["host", "service", "unit", "container"]
 _MESSAGE_KEYS = ("MESSAGE", "message", "msg", "log")
 _CONTEXT_FIELDS = (
     ("host", ("_HOSTNAME", "hostname", "host")),
@@ -61,6 +62,38 @@ def _message_from_record(record: dict[str, object], *, include_context: bool = F
     return message
 
 
+def _parse_records(
+    text: str,
+    input_format: InputFormat,
+    *,
+    require_structured: bool,
+) -> list[dict[str, object]] | None:
+    if input_format == "text":
+        if require_structured:
+            raise InputFormatError("structured grouping and source filters require JSON Lines input")
+        return None
+    if not text.strip():
+        return []
+
+    records: list[dict[str, object]] = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as exc:
+            if input_format == "auto" and not require_structured:
+                return None
+            raise InputFormatError(f"invalid JSON on line {line_number}: {exc.msg}") from exc
+
+        if not isinstance(value, dict):
+            if input_format == "auto" and not require_structured:
+                return None
+            raise InputFormatError(f"JSON line {line_number} must contain an object")
+        records.append(value)
+    return records
+
+
 def normalize_input(
     text: str,
     input_format: InputFormat = "auto",
@@ -70,29 +103,34 @@ def normalize_input(
 ) -> str:
     """Normalize raw text or JSON Lines records into analyzer-friendly text."""
     filters = {key: value for key, value in (source_filters or {}).items() if value}
-    if input_format == "text" or not text.strip():
-        if filters:
-            raise InputFormatError("source filters require JSON Lines input")
+    records = _parse_records(text, input_format, require_structured=bool(filters))
+    if records is None:
         return text
-
-    records: list[dict[str, object]] = []
-    for line_number, line in enumerate(text.splitlines(), start=1):
-        if not line.strip():
-            continue
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError as exc:
-            if input_format == "auto" and not filters:
-                return text
-            raise InputFormatError(f"invalid JSON on line {line_number}: {exc.msg}") from exc
-
-        if not isinstance(value, dict):
-            if input_format == "auto" and not filters:
-                return text
-            raise InputFormatError(f"JSON line {line_number} must contain an object")
-        records.append(value)
 
     if filters:
         records = [record for record in records if _record_matches_filters(record, filters)]
 
     return "\n".join(_message_from_record(record, include_context=include_context) for record in records)
+
+
+def normalize_grouped_input(
+    text: str,
+    group_by: GroupField,
+    input_format: InputFormat = "auto",
+    *,
+    include_context: bool = False,
+    source_filters: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Normalize structured records into independent source groups for analysis."""
+    filters = {key: value for key, value in (source_filters or {}).items() if value}
+    records = _parse_records(text, input_format, require_structured=True)
+    assert records is not None
+
+    grouped: dict[str, list[str]] = {}
+    for record in records:
+        if filters and not _record_matches_filters(record, filters):
+            continue
+        group_value = _context_value(record, group_by) or "<unknown>"
+        grouped.setdefault(group_value, []).append(_message_from_record(record, include_context=include_context))
+
+    return {group: "\n".join(messages) for group, messages in grouped.items()}

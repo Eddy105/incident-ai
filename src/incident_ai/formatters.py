@@ -18,6 +18,27 @@ def format_json_many(analyses: tuple[IncidentAnalysis, ...], *, pretty: bool = T
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
 
 
+def format_json_grouped(
+    groups: tuple[tuple[str, tuple[IncidentAnalysis, ...]], ...],
+    *,
+    group_by: str,
+    pretty: bool = True,
+) -> str:
+    payload = {
+        "group_by": group_by,
+        "groups": [
+            {
+                "value": value,
+                "analyses": [analysis.to_dict() for analysis in analyses],
+            }
+            for value, analyses in groups
+        ],
+    }
+    if pretty:
+        return json.dumps(payload, indent=2, ensure_ascii=False)
+    return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+
+
 def format_text(analysis: IncidentAnalysis) -> str:
     lines = [
         "INCIDENTAI",
@@ -46,3 +67,15 @@ def format_text(analysis: IncidentAnalysis) -> str:
 
 def format_text_many(analyses: tuple[IncidentAnalysis, ...]) -> str:
     return "\n\n".join(format_text(analysis) for analysis in analyses)
+
+
+def format_text_grouped(
+    groups: tuple[tuple[str, tuple[IncidentAnalysis, ...]], ...],
+    *,
+    group_by: str,
+) -> str:
+    sections: list[str] = []
+    for value, analyses in groups:
+        header = f"SOURCE GROUP {group_by}={value}\n" + "-" * 72
+        sections.append(f"{header}\n{format_text_many(analyses)}")
+    return "\n\n".join(sections)

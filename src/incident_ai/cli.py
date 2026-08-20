@@ -7,8 +7,15 @@ from pathlib import Path
 from . import __version__
 from .analyzer import analyze_all, analyze_text
 from .enrichment import EnrichmentError, enrich_with_openai
-from .formatters import format_json, format_json_many, format_text, format_text_many
-from .ingest import InputFormatError, normalize_input
+from .formatters import (
+    format_json,
+    format_json_grouped,
+    format_json_many,
+    format_text,
+    format_text_grouped,
+    format_text_many,
+)
+from .ingest import InputFormatError, normalize_grouped_input, normalize_input
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,6 +60,11 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--unit", help="Analyze only JSON Lines records from this systemd unit.")
     analyze.add_argument("--container", help="Analyze only JSON Lines records from this container.")
     analyze.add_argument(
+        "--group-by",
+        choices=("host", "service", "unit", "container"),
+        help="Analyze structured records independently per source field to prevent cross-source correlation.",
+    )
+    analyze.add_argument(
         "--enrich",
         action="store_true",
         help="Opt in to remote OpenAI enrichment after local analysis and redaction.",
@@ -79,6 +91,12 @@ def _exit_code(severity: str, incident_type: str) -> int:
     return 1
 
 
+def _maybe_enrich_many(analyses, *, enabled: bool, model: str):
+    if not enabled:
+        return analyses
+    return tuple(enrich_with_openai(item, model=model) for item in analyses)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -95,25 +113,53 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     try:
-        text = _read_source(args.source)
-        text = normalize_input(
-            text,
-            args.input_format,
-            include_context=args.include_context,
-            source_filters=source_filters,
-        )
+        raw_text = _read_source(args.source)
+        if args.group_by:
+            grouped_text = normalize_grouped_input(
+                raw_text,
+                args.group_by,
+                args.input_format,
+                include_context=args.include_context,
+                source_filters=source_filters,
+            )
+        else:
+            text = normalize_input(
+                raw_text,
+                args.input_format,
+                include_context=args.include_context,
+                source_filters=source_filters,
+            )
     except OSError as exc:
         parser.exit(3, f"incident-ai: unable to read {args.source!r}: {exc}\n")
     except InputFormatError as exc:
         parser.exit(3, f"incident-ai: invalid structured input: {exc}\n")
 
+    if args.group_by:
+        grouped_analyses = []
+        try:
+            for value, group_text in grouped_text.items():
+                analyses = analyze_all(group_text) if args.all else (analyze_text(group_text),)
+                analyses = _maybe_enrich_many(analyses, enabled=args.enrich, model=args.model)
+                grouped_analyses.append((value, analyses))
+        except EnrichmentError as exc:
+            parser.exit(4, f"incident-ai: {exc}\n")
+
+        groups = tuple(grouped_analyses)
+        if args.json or args.compact:
+            print(format_json_grouped(groups, group_by=args.group_by, pretty=not args.compact))
+        else:
+            print(format_text_grouped(groups, group_by=args.group_by))
+        return max(
+            (_exit_code(item.severity, item.incident_type) for _value, analyses in groups for item in analyses),
+            default=0,
+        )
+
     if args.all:
         analyses = analyze_all(text)
-        if args.enrich:
-            try:
-                analyses = tuple(enrich_with_openai(item, model=args.model) for item in analyses)
-            except EnrichmentError as exc:
-                parser.exit(4, f"incident-ai: {exc}\n")
+        try:
+            analyses = _maybe_enrich_many(analyses, enabled=args.enrich, model=args.model)
+        except EnrichmentError as exc:
+            parser.exit(4, f"incident-ai: {exc}\n")
 
         if args.json or args.compact:
             print(format_json_many(analyses, pretty=not args.compact))

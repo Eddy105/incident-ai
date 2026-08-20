@@ -100,6 +100,38 @@ def test_cli_source_filter_without_match_returns_empty_input(tmp_path: Path, cap
     assert payload["incident_type"] == "empty_input"
 
 
+def test_cli_groups_structured_logs_before_correlation(tmp_path: Path, capsys) -> None:
+    log = tmp_path / "cluster.jsonl"
+    log.write_text(
+        '{"MESSAGE":"No space left on device","_HOSTNAME":"web-01"}\n'
+        '{"MESSAGE":"filesystem /var 100%","_HOSTNAME":"web-02"}\n'
+        '{"MESSAGE":"Permission denied","_HOSTNAME":"web-02"}',
+        encoding="utf-8",
+    )
+
+    code = main(["analyze", str(log), "--group-by", "host", "--all", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 2
+    assert payload["group_by"] == "host"
+    assert [group["value"] for group in payload["groups"]] == ["web-01", "web-02"]
+    web_01 = payload["groups"][0]["analyses"]
+    web_02 = payload["groups"][1]["analyses"]
+    assert web_01[0]["incident_type"] == "disk_full"
+    assert web_01[0]["confidence"] == 0.98
+    assert web_02[0]["incident_type"] == "permission_denied"
+
+
+def test_cli_group_by_rejects_plain_text(tmp_path: Path) -> None:
+    log = tmp_path / "app.log"
+    log.write_text("Permission denied", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["analyze", str(log), "--group-by", "host", "--input-format", "text"])
+
+    assert exc_info.value.code == 3
+
+
 def test_cli_jsonl_reports_malformed_input(tmp_path: Path) -> None:
     log = tmp_path / "broken.jsonl"
     log.write_text('{"message":"Permission denied"}\nnot-json', encoding="utf-8")
