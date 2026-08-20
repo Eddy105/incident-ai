@@ -1,8 +1,7 @@
 import hashlib
 import hmac
 import json
-from urllib.error import HTTPError
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -53,7 +52,7 @@ def test_send_webhook_posts_json(monkeypatch) -> None:
     assert opener.request.full_url == "https://example.test/hook"
     assert json.loads(body) == {"incident_type": "disk_full"}
     assert opener.request.get_header("Content-type") == "application/json"
-    assert opener.request.get_header("User-agent") == "IncidentAI/0.11"
+    assert opener.request.get_header("User-agent") == "IncidentAI/0.11.3"
     assert opener.request.get_header("X-incidentai-event-id") == hashlib.sha256(body).hexdigest()
     assert opener.timeout == 3.5
 
