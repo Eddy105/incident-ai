@@ -5,9 +5,9 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .analyzer import analyze_text
+from .analyzer import analyze_all, analyze_text
 from .enrichment import EnrichmentError, enrich_with_openai
-from .formatters import format_json, format_text
+from .formatters import format_json, format_json_many, format_text, format_text_many
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -30,6 +30,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--compact",
         action="store_true",
         help="Emit compact JSON. Implies --json.",
+    )
+    analyze.add_argument(
+        "--all",
+        action="store_true",
+        help="Return every distinct recognized incident, ordered by confidence.",
     )
     analyze.add_argument(
         "--enrich",
@@ -66,6 +71,20 @@ def main(argv: list[str] | None = None) -> int:
         text = _read_source(args.source)
     except OSError as exc:
         parser.exit(3, f"incident-ai: unable to read {args.source!r}: {exc}\n")
+
+    if args.all:
+        analyses = analyze_all(text)
+        if args.enrich:
+            try:
+                analyses = tuple(enrich_with_openai(item, model=args.model) for item in analyses)
+            except EnrichmentError as exc:
+                parser.exit(4, f"incident-ai: {exc}\n")
+
+        if args.json or args.compact:
+            print(format_json_many(analyses, pretty=not args.compact))
+        else:
+            print(format_text_many(analyses))
+        return max(_exit_code(item.severity, item.incident_type) for item in analyses)
 
     analysis = analyze_text(text)
     if args.enrich:

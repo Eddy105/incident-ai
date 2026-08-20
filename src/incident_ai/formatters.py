@@ -11,6 +11,13 @@ def format_json(analysis: IncidentAnalysis, *, pretty: bool = True) -> str:
     return json.dumps(analysis.to_dict(), separators=(",", ":"), ensure_ascii=False)
 
 
+def format_json_many(analyses: tuple[IncidentAnalysis, ...], *, pretty: bool = True) -> str:
+    payload = [analysis.to_dict() for analysis in analyses]
+    if pretty:
+        return json.dumps(payload, indent=2, ensure_ascii=False)
+    return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+
+
 def format_text(analysis: IncidentAnalysis) -> str:
     lines = [
         "INCIDENTAI",
@@ -35,3 +42,7 @@ def format_text(analysis: IncidentAnalysis) -> str:
     if analysis.enrichment:
         lines.extend(["", "AI enrichment:", analysis.enrichment])
     return "\n".join(lines)
+
+
+def format_text_many(analyses: tuple[IncidentAnalysis, ...]) -> str:
+    return "\n\n".join(format_text(analysis) for analysis in analyses)
