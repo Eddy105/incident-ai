@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented here.
 
+## [0.10.0] - 2026-08-20
+
+### Added
+
+- Secure opt-in `--webhook` export for posting structured incident analysis to an explicit HTTP(S) endpoint
+- Webhook delivery for single, multi-incident, and source-grouped analyses
+- Mandatory `--redact` when using `--webhook` to prevent accidental secret disclosure
+- HTTP status, URL-scheme, timeout, and transport error handling with stable CLI exit code 4
+- Regression coverage for JSON webhook payloads and delivery failures
+
 ## [0.9.0] - 2026-08-20
 
 ### Added
