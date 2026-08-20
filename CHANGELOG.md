@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented here.
 
+## [0.11.2] - 2026-08-20
+
+### Added
+
+- Add deterministic `X-IncidentAI-Event-ID` headers to webhook requests
+- Derive event IDs from the exact serialized request body for receiver-side idempotency and duplicate detection
+- Add regression coverage for stable and changing event IDs
+
 ## [0.11.1] - 2026-08-20
 
 ### Security
@@ -37,70 +45,3 @@ All notable changes to this project will be documented here.
 - Add regression coverage for private destinations, credentials, and redirects
 
 ## [0.10.0] - 2026-08-20
-
-### Added
-
-- Add opt-in HTTP(S) webhook export for structured incident analysis
-- Require `--redact` for webhook delivery to prevent accidental secret disclosure
-- Add explicit integration failure exit code `4`
-
-## [0.9.0] - 2026-08-20
-
-### Added
-
-- Add opt-in redaction for exported incident analysis
-- Redact common secrets and identifiers from text, JSON, grouped JSON, and SARIF output
-- Add regression coverage for redaction behavior
-
-## [0.8.0] - 2026-08-20
-
-### Added
-
-- Add SARIF 2.1.0 output for CI and security tooling
-- Include incident fingerprints, confidence, evidence, checks, and recommended actions as SARIF properties
-
-## [0.7.0] - 2026-08-20
-
-### Added
-
-- Add source-grouped cross-record correlation with `--group-by`
-- Prevent cross-source confidence correlation when records belong to different hosts, services, units, or containers
-
-## [0.6.0] - 2026-08-20
-
-### Added
-
-- Add source-scoping filters for host, service, systemd unit, and container
-- Preserve structured source context in incident evidence
-
-## [0.5.0] - 2026-08-20
-
-### Added
-
-- Add correlated confidence scoring for independent supporting incident signals
-
-## [0.4.0] - 2026-08-20
-
-### Added
-
-- Preserve host, service, unit, container, and PID context from structured logs
-
-## [0.3.0] - 2026-08-20
-
-### Added
-
-- Add JSON Lines ingestion for journald, container, and application logs
-- Add automatic, strict, and explicit input format selection
-
-## [0.2.0] - 2026-08-20
-
-### Added
-
-- Add multi-incident analysis with `analyze_all()` and `--all`
-
-## [0.1.0] - 2026-08-20
-
-### Added
-
-- Initial deterministic Linux and service incident analysis
-- CLI, JSON output, Docker image, CI, tests, and automatic releases

@@ -36,6 +36,7 @@ IncidentAI also provides checks and recommended actions, for example `systemctl 
 - Optional `--redact` output sanitization for common secrets and identifiers
 - Secure opt-in `--webhook` export for redacted incident payloads
 - Optional HMAC-SHA256 webhook signatures for authenticated delivery
+- Deterministic webhook event IDs for receiver-side idempotency and duplicate detection
 - Optional OpenAI enrichment behind explicit `--enrich` opt-in and local redaction
 - Docker image support
 - Automated linting, test coverage, package builds, Docker builds, and tagged GitHub releases
@@ -127,6 +128,8 @@ incident-ai analyze app.log --json --redact --webhook https://ops.example.test/i
 
 For authenticated webhook delivery, set `INCIDENT_AI_WEBHOOK_SECRET` in the process environment. IncidentAI then adds `X-IncidentAI-Timestamp` and `X-IncidentAI-Signature` headers. The signature is `sha256=HMAC_SHA256(secret, timestamp + "." + raw_request_body)`. The timestamp is included in the signed payload so receivers can reject stale or replayed requests. The secret is never sent as a header or included in the JSON payload.
 
+Every webhook also includes `X-IncidentAI-Event-ID`, a deterministic SHA-256 identifier derived from the exact serialized request body. Receivers can use it as an idempotency key to ignore duplicate deliveries of the same payload.
+
 ```bash
 export INCIDENT_AI_WEBHOOK_SECRET='replace-with-a-random-secret'
 incident-ai analyze app.log --json --redact --webhook https://ops.example.test/incidents
@@ -217,22 +220,3 @@ For a fresh checkout with an authenticated GitHub CLI, the repository can be cre
 ```bash
 ./scripts/publish-github.sh
 ```
-
-The script creates `Eddy105/incident-ai` when necessary, pushes `main`, and publishes the version tag. The tag triggers the automated GitHub Release workflow.
-
-## Architecture
-
-See [`docs/architecture.md`](docs/architecture.md).
-
-## Security and privacy
-
-The default analyzer runs entirely locally and does not upload logs. `--redact` provides an explicit sanitization pass for exported/displayed analysis. `--webhook` requires that sanitization and sends only the resulting structured analysis to the explicitly supplied endpoint. Webhooks can optionally be authenticated with HMAC-SHA256 using `INCIDENT_AI_WEBHOOK_SECRET`; receivers should enforce a short timestamp acceptance window to prevent replay. Optional `--enrich` also redacts evidence before remote processing. Avoid placing credentials, tokens, personal data, or secrets in bug reports. See [`SECURITY.md`](SECURITY.md).
-
-## Roadmap
-
-- REST API and small web dashboard
-- ServerWatch integration for automatic incident context
-
-## License
-
-MIT
