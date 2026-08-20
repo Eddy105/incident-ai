@@ -50,6 +50,7 @@ def _sarif_result(analysis: IncidentAnalysis) -> dict[str, object]:
         "message": {"text": analysis.probable_cause},
         "properties": {
             "title": analysis.title,
+            "fingerprint": analysis.fingerprint,
             "severity": analysis.severity,
             "confidence": analysis.confidence,
             "evidence": list(analysis.evidence),
@@ -91,6 +92,7 @@ def format_text(analysis: IncidentAnalysis) -> str:
         "=" * 72,
         f"Incident:   {analysis.title}",
         f"Type:       {analysis.incident_type}",
+        f"Fingerprint: {analysis.fingerprint}",
         f"Severity:   {analysis.severity.upper()}",
         f"Confidence: {analysis.confidence:.0%}",
         "",

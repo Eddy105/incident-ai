@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented here.
 
+## [0.11.0] - 2026-08-20
+
+### Added
+
+- Add stable 16-character SHA-256 incident fingerprints for deduplication and correlation
+- Include fingerprints in JSON, grouped JSON, and SARIF output
+- Display fingerprints in human-readable incident output
+- Add regression coverage for fingerprint stability and separation
+
 ## [0.10.2] - 2026-08-20
 
 ### Security
