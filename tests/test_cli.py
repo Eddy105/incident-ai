@@ -43,6 +43,47 @@ def test_cli_all_preserves_single_incident_shape_as_list(tmp_path: Path, capsys)
     assert payload[0]["incident_type"] == "permission_denied"
 
 
+def test_cli_sarif_output(tmp_path: Path, capsys) -> None:
+    log = tmp_path / "app.log"
+    log.write_text("No space left on device", encoding="utf-8")
+
+    code = main(["analyze", str(log), "--sarif"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 2
+    assert payload["version"] == "2.1.0"
+    assert payload["runs"][0]["tool"]["driver"]["name"] == "IncidentAI"
+    assert payload["runs"][0]["results"][0]["ruleId"] == "disk_full"
+    assert payload["runs"][0]["results"][0]["level"] == "error"
+    assert payload["runs"][0]["results"][0]["properties"]["confidence"] == 0.98
+
+
+def test_cli_sarif_flattens_grouped_results(tmp_path: Path, capsys) -> None:
+    log = tmp_path / "cluster.jsonl"
+    log.write_text(
+        '{"MESSAGE":"No space left on device","_HOSTNAME":"web-01"}\n'
+        '{"MESSAGE":"Permission denied","_HOSTNAME":"web-02"}',
+        encoding="utf-8",
+    )
+
+    code = main(["analyze", str(log), "--group-by", "host", "--sarif"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 2
+    results = payload["runs"][0]["results"]
+    assert [result["ruleId"] for result in results] == ["disk_full", "permission_denied"]
+
+
+def test_cli_sarif_rejects_compact(tmp_path: Path) -> None:
+    log = tmp_path / "app.log"
+    log.write_text("Permission denied", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["analyze", str(log), "--sarif", "--compact"])
+
+    assert exc_info.value.code == 2
+
+
 def test_cli_auto_detects_journald_json_lines(tmp_path: Path, capsys) -> None:
     log = tmp_path / "journal.jsonl"
     log.write_text(
