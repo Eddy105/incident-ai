@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented here.
 
+## [0.7.0] - 2026-08-20
+
+### Added
+
+- Source-grouped correlation with `--group-by host|service|unit|container`
+- Independent per-group incident detection and confidence scoring for structured JSON Lines input
+- Group-aware JSON and human-readable output, including an explicit `<unknown>` bucket for records missing the selected source field
+
 ## [0.6.0] - 2026-08-20
 
 ### Added
