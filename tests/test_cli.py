@@ -58,6 +58,21 @@ def test_cli_auto_detects_journald_json_lines(tmp_path: Path, capsys) -> None:
     assert [item["incident_type"] for item in payload] == ["disk_full", "dns_failure"]
 
 
+def test_cli_include_context_keeps_journald_metadata_in_evidence(tmp_path: Path, capsys) -> None:
+    log = tmp_path / "journal.jsonl"
+    log.write_text(
+        '{"MESSAGE":"No space left on device","_HOSTNAME":"web-01","_SYSTEMD_UNIT":"worker.service","_PID":"42"}',
+        encoding="utf-8",
+    )
+
+    code = main(["analyze", str(log), "--json", "--include-context"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 2
+    assert payload["incident_type"] == "disk_full"
+    assert payload["evidence"] == ["[host=web-01 unit=worker.service pid=42] No space left on device"]
+
+
 def test_cli_jsonl_reports_malformed_input(tmp_path: Path) -> None:
     log = tmp_path / "broken.jsonl"
     log.write_text('{"message":"Permission denied"}\nnot-json', encoding="utf-8")
