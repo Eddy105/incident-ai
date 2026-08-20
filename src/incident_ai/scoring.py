@@ -8,7 +8,7 @@ def _rx(pattern: str) -> re.Pattern[str]:
 
 
 # Supplemental signatures raise confidence only after a primary incident rule matches.
-# They are intentionally narrower than the primary rules so unrelated log text cannot
+# They are intentionally distinct from the primary patterns so supporting context cannot
 # create an incident by itself.
 CORROBORATING_SIGNALS: dict[str, tuple[re.Pattern[str], ...]] = {
     "disk_full": (
@@ -16,9 +16,9 @@ CORROBORATING_SIGNALS: dict[str, tuple[re.Pattern[str], ...]] = {
         _rx(r"inode(?:s)? .*\b100%\b"),
     ),
     "oom_kill": (
-        _rx(r"invoked oom-killer"),
         _rx(r"memory cgroup out of memory"),
         _rx(r"oom_reaper"),
+        _rx(r"memory pressure .*critical"),
     ),
     "nginx_upstream_refused": (
         _rx(r"upstream server temporarily disabled"),
