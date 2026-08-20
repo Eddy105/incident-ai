@@ -26,6 +26,7 @@ IncidentAI also provides checks and recommended actions, for example `systemctl 
 - Analyze files or stdin
 - Human-readable incident reports
 - Machine-readable JSON output
+- SARIF 2.1.0 output for CI and security tooling
 - Stable exit codes for automation
 - Evidence extraction from the supplied log text
 - Structured JSON Lines ingestion for journald, containers, and applications
@@ -93,6 +94,18 @@ journalctl -o json -u nginx --since '-10 min' | incident-ai analyze - --input-fo
 
 With `--include-context`, recognized metadata is rendered as a compact evidence prefix such as `[host=web-01 service=nginx unit=nginx.service pid=1234]`. The flag is opt-in, so existing normalized JSON Lines output remains unchanged by default.
 
+Analyze only records from a specific source:
+
+```bash
+journalctl -o json --since '-10 min' | incident-ai analyze - --host web-01 --service nginx
+```
+
+Analyze each source independently before correlation:
+
+```bash
+journalctl -o json --since '-10 min' | incident-ai analyze - --group-by host --all --json
+```
+
 JSON output:
 
 ```bash
@@ -104,6 +117,20 @@ Compact JSON for scripts:
 ```bash
 incident-ai analyze app.log --compact
 ```
+
+SARIF 2.1.0 for GitHub Code Scanning, Azure DevOps, or other SARIF-aware tooling:
+
+```bash
+incident-ai analyze app.log --sarif
+```
+
+For multiple incidents:
+
+```bash
+incident-ai analyze app.log --all --sarif > results.sarif
+```
+
+`--sarif` emits one SARIF result per detected incident and preserves severity, confidence, evidence, verification checks, and recommended actions as result properties. Source-grouped analyses are flattened into one SARIF run because SARIF already provides a single result stream suitable for CI ingestion.
 
 Optional AI enrichment:
 
@@ -162,7 +189,7 @@ For a fresh checkout with an authenticated GitHub CLI, the repository can be cre
 ./scripts/publish-github.sh
 ```
 
-The script creates `Eddy105/incident-ai` when necessary, pushes `main`, and publishes the `v0.1.0` tag. The tag triggers the automated GitHub Release workflow.
+The script creates `Eddy105/incident-ai` when necessary, pushes `main`, and publishes the version tag. The tag triggers the automated GitHub Release workflow.
 
 ## Architecture
 
@@ -174,9 +201,7 @@ The default analyzer runs entirely locally and does not upload logs. Avoid placi
 
 ## Roadmap
 
-- Rule scoring from multiple correlated signals
-- Cross-record service and host context correlation
-- SARIF/webhook integrations
+- Webhook integrations
 - REST API and small web dashboard
 - ServerWatch integration for automatic incident context
 
