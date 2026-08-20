@@ -57,13 +57,51 @@ def test_send_webhook_posts_json(monkeypatch) -> None:
     captured["body"] = opener.request.data
     captured["content_type"] = opener.request.get_header("Content-type")
     captured["user_agent"] = opener.request.get_header("User-agent")
+    captured["event_id"] = opener.request.get_header("X-incidentai-event-id")
     captured["timeout"] = opener.timeout
 
     assert captured["url"] == "https://example.test/hook"
     assert json.loads(captured["body"]) == {"incident_type": "disk_full"}
     assert captured["content_type"] == "application/json"
-    assert captured["user_agent"] == "IncidentAI/0.10"
+    assert captured["user_agent"] == "IncidentAI/0.11"
+    assert captured["event_id"] == hashlib.sha256(captured["body"]).hexdigest()
     assert captured["timeout"] == 3.5
+
+
+def test_send_webhook_event_id_is_stable_for_same_payload(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    openers = [_Opener(_Response()), _Opener(_Response())]
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: openers.pop(0))
+
+    first = _Opener(_Response())
+    second = _Opener(_Response())
+    openers.extend([first, second])
+
+    send_webhook({"incident_type": "oom", "fingerprint": "abc123"}, "https://example.test/hook")
+    first_id = openers[0].request.get_header("X-incidentai-event-id") if openers[0].request else None
+
+    send_webhook({"incident_type": "oom", "fingerprint": "abc123"}, "https://example.test/hook")
+    second_id = openers[1].request.get_header("X-incidentai-event-id") if openers[1].request else None
+
+    assert first_id is not None
+    assert first_id == second_id
+
+
+def test_send_webhook_event_id_changes_with_payload(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    openers = [_Opener(_Response()), _Opener(_Response())]
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: openers.pop(0))
+
+    first = openers[0]
+    openers.append(first)
+    send_webhook({"incident_type": "oom"}, "https://example.test/hook")
+    first_id = first.request.get_header("X-incidentai-event-id")
+
+    second = openers[0]
+    send_webhook({"incident_type": "disk_full"}, "https://example.test/hook")
+    second_id = second.request.get_header("X-incidentai-event-id")
+
+    assert first_id != second_id
 
 
 def test_send_webhook_signs_payload(monkeypatch) -> None:
@@ -80,6 +118,7 @@ def test_send_webhook_signs_payload(monkeypatch) -> None:
 
     assert opener.request.get_header("X-incidentai-timestamp") == "1700000000"
     assert opener.request.get_header("X-incidentai-signature") == f"sha256={expected}"
+    assert opener.request.get_header("X-incidentai-event-id") == hashlib.sha256(body).hexdigest()
 
 
 def test_send_webhook_uses_environment_secret(monkeypatch) -> None:
