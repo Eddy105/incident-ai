@@ -62,16 +62,18 @@ def send_webhook(
     timeout: float = 10.0,
     secret: str | None = None,
 ) -> None:
-    """POST JSON to a public webhook, optionally authenticated with HMAC-SHA256."""
+    """POST JSON to a public webhook with a deterministic event identifier."""
     _validate_destination(url)
 
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    event_id = hashlib.sha256(body).hexdigest()
     signing_secret = secret if secret is not None else os.environ.get("INCIDENT_AI_WEBHOOK_SECRET")
     timestamp = int(time.time())
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "IncidentAI/0.10",
+        "User-Agent": "IncidentAI/0.11",
+        "X-IncidentAI-Event-ID": event_id,
         **_signature_headers(body, signing_secret, timestamp),
     }
     request = Request(url, data=body, headers=headers, method="POST")
