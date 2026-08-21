@@ -12,6 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from . import __version__
+
 MAX_WEBHOOK_RETRIES = 8
 
 
@@ -108,7 +110,7 @@ def send_webhook(
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "IncidentAI/0.11.5",
+        "User-Agent": f"IncidentAI/{__version__}",
         "X-IncidentAI-Event-ID": event_id,
     }
 
