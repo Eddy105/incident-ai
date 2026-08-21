@@ -108,7 +108,7 @@ def send_webhook(
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "IncidentAI/0.11.5",
+        "User-Agent": "IncidentAI/0.11.6",
         "X-IncidentAI-Event-ID": event_id,
     }
 
