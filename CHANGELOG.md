@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented here.
 
+## [0.15.0] - 2026-08-22
+
+### Security
+
+- Bound concurrent local API analysis requests to 16 by default to prevent unbounded request-thread and analysis pressure
+- Return stable `concurrency_limit_reached` errors with HTTP 429 when the configured concurrency budget is exhausted
+- Advertise the effective concurrency limit through `GET /capabilities`
+- Allow embedding applications to configure `max_concurrent_requests` explicitly
+- Add regression coverage for the concurrency boundary and capability reporting
+
 ## [0.14.0] - 2026-08-21
 
 ### Added
