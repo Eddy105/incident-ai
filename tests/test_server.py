@@ -69,7 +69,7 @@ def test_capabilities_endpoint_exposes_integration_contract() -> None:
     assert "multi_incident" in payload["features"]
     assert "stable_error_codes" in payload["features"]
     assert "stable_fingerprints" in payload["features"]
-    assert payload["limits"] == {"max_body_bytes": 1_048_576}
+    assert payload["limits"] == {"max_body_bytes": 2048}
 
 
 def test_analyze_endpoint_returns_structured_incident() -> None:
