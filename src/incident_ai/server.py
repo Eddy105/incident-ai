@@ -4,12 +4,14 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from . import __version__
 from .analyzer import analyze_all, analyze_text
 from .ingest import InputFormatError, normalize_input
 from .models import IncidentAnalysis
 from .redaction import redact_analysis
 
 DEFAULT_MAX_BODY_BYTES = 1_048_576
+API_VERSION = "1"
 
 
 class APIError(ValueError):
@@ -75,6 +77,9 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/healthz":
             self._write_json(200, {"status": "ok"})
+            return
+        if self.path == "/version":
+            self._write_json(200, {"api_version": API_VERSION, "version": __version__})
             return
         self._write_json(404, {"error": "not_found"})
 

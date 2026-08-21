@@ -17,6 +17,7 @@ python -c 'from incident_ai.server import serve; serve("127.0.0.1", 8080)'
 The server exposes:
 
 - `GET /healthz` — returns `{"status":"ok"}`.
+- `GET /version` — returns the stable API major version and installed package version.
 - `POST /analyze` — accepts a JSON request and returns one analysis or a list of analyses.
 
 ## Analyze a log
@@ -35,6 +36,14 @@ The request object supports:
 - `include_context` (boolean)
 - `host`, `service`, `unit`, `container` source filters
 - `redact` (boolean)
+
+## Version discovery
+
+```bash
+curl -sS http://127.0.0.1:8080/version
+```
+
+The response contains `api_version` for compatibility decisions and `version` for the installed IncidentAI release. See [`api-versioning.md`](api-versioning.md) for the compatibility policy.
 
 `--enrich` and outbound webhooks are deliberately not part of this local API. The server is designed as a local ingestion boundary for monitoring systems such as ServerWatch; remote enrichment and external delivery remain explicit CLI operations.
 

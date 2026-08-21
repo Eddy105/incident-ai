@@ -41,6 +41,8 @@ IncidentAI also provides checks and recommended actions, for example `systemctl 
 - Honors numeric `Retry-After` responses for rate limiting and server backpressure
 - Optional webhook dry-run validation without sending a request
 - Optional OpenAI enrichment behind explicit `--enrich` opt-in and local redaction
+- Dependency-free local HTTP API for monitoring integrations
+- `/version` endpoint for API compatibility discovery
 - Docker image support
 - Automated linting, test coverage, package builds, Docker builds, and tagged GitHub releases
 - Weekly Dependabot updates for Python, Docker, and GitHub Actions dependencies
@@ -195,6 +197,23 @@ incident-ai analyze app.log --enrich
 ```
 
 `--enrich` is never enabled automatically. IncidentAI first runs the local deterministic analyzer and sends only the resulting structured diagnosis plus redacted evidence, not the full raw log. Use `--model` to override the default model.
+
+## Local HTTP API
+
+Start the dependency-free local server:
+
+```bash
+incident-ai-server
+```
+
+The default listener is `127.0.0.1:8080`. Check health and API compatibility:
+
+```bash
+curl -sS http://127.0.0.1:8080/healthz
+curl -sS http://127.0.0.1:8080/version
+```
+
+`/version` returns a stable `api_version` for compatibility decisions and the installed IncidentAI `version`. See [`docs/local-api.md`](docs/local-api.md) and [`docs/api-versioning.md`](docs/api-versioning.md).
 
 ## Exit codes
 
