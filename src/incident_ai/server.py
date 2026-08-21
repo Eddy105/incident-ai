@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -11,6 +12,7 @@ from .models import IncidentAnalysis
 from .redaction import redact_analysis
 
 DEFAULT_MAX_BODY_BYTES = 1_048_576
+DEFAULT_MAX_CONCURRENT_REQUESTS = 16
 API_VERSION = "1"
 API_ENDPOINTS = ["/healthz", "/version", "/capabilities", "/analyze"]
 API_FEATURES = [
@@ -21,6 +23,7 @@ API_FEATURES = [
     "redaction",
     "stable_error_codes",
     "stable_fingerprints",
+    "bounded_concurrency",
 ]
 
 
@@ -104,13 +107,26 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
                 "version": __version__,
                 "endpoints": API_ENDPOINTS,
                 "features": API_FEATURES,
-                "limits": {"max_body_bytes": self.server.max_body_bytes},  # type: ignore[attr-defined]
+                "limits": {
+                    "max_body_bytes": self.server.max_body_bytes,  # type: ignore[attr-defined]
+                    "max_concurrent_requests": self.server.max_concurrent_requests,  # type: ignore[attr-defined]
+                },
             }
             self._write_json(200, payload)
             return
         self._write_error(404, "not_found", "not_found")
 
     def do_POST(self) -> None:  # noqa: N802
+        semaphore = self.server.request_semaphore  # type: ignore[attr-defined]
+        if not semaphore.acquire(blocking=False):
+            self._write_error(429, "concurrency_limit_reached", "concurrency_limit_reached")
+            return
+        try:
+            self._do_post()
+        finally:
+            semaphore.release()
+
+    def _do_post(self) -> None:
         if self.path != "/analyze":
             self._write_error(404, "not_found", "not_found")
             return
@@ -146,15 +162,25 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
         return
 
 
-def serve(host: str = "127.0.0.1", port: int = 8080, *, max_body_bytes: int = DEFAULT_MAX_BODY_BYTES) -> None:
+def serve(
+    host: str = "127.0.0.1",
+    port: int = 8080,
+    *,
+    max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
+    max_concurrent_requests: int = DEFAULT_MAX_CONCURRENT_REQUESTS,
+) -> None:
     """Run the local IncidentAI HTTP API."""
     if not 1 <= port <= 65535:
         raise ValueError("port must be between 1 and 65535")
     if max_body_bytes <= 0:
         raise ValueError("max_body_bytes must be greater than zero")
+    if max_concurrent_requests <= 0:
+        raise ValueError("max_concurrent_requests must be greater than zero")
 
     server = ThreadingHTTPServer((host, port), IncidentAPIHandler)
     server.max_body_bytes = max_body_bytes  # type: ignore[attr-defined]
+    server.max_concurrent_requests = max_concurrent_requests  # type: ignore[attr-defined]
+    server.request_semaphore = threading.BoundedSemaphore(max_concurrent_requests)  # type: ignore[attr-defined]
     try:
         server.serve_forever()
     finally:
