@@ -40,6 +40,19 @@ def test_health_endpoint() -> None:
     assert payload == {"status": "ok"}
 
 
+def test_version_endpoint_exposes_api_and_package_version() -> None:
+    server, thread = _running_server()
+    try:
+        status, payload = _request(server, "GET", "/version")
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    assert status == 200
+    assert payload == {"api_version": "1", "version": "0.12.2"}
+
+
 def test_analyze_endpoint_returns_structured_incident() -> None:
     server, thread = _running_server()
     try:
