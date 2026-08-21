@@ -6,9 +6,11 @@ import urllib.request
 from incident_ai.server import IncidentAPIHandler, ThreadingHTTPServer
 
 
-def _running_server(max_body_bytes: int = 1024 * 1024):
+def _running_server(max_body_bytes: int = 1024 * 1024, max_concurrent_requests: int = 16):
     server = ThreadingHTTPServer(("127.0.0.1", 0), IncidentAPIHandler)
     server.max_body_bytes = max_body_bytes
+    server.max_concurrent_requests = max_concurrent_requests
+    server.request_semaphore = threading.BoundedSemaphore(max_concurrent_requests)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
@@ -50,11 +52,11 @@ def test_version_endpoint_exposes_api_and_package_version() -> None:
         server.server_close()
 
     assert status == 200
-    assert payload == {"api_version": "1", "version": "0.14.0"}
+    assert payload == {"api_version": "1", "version": "0.15.0"}
 
 
 def test_capabilities_endpoint_exposes_integration_contract() -> None:
-    server, thread = _running_server(max_body_bytes=2048)
+    server, thread = _running_server(max_body_bytes=2048, max_concurrent_requests=4)
     try:
         status, payload = _request(server, "GET", "/capabilities")
     finally:
@@ -64,12 +66,28 @@ def test_capabilities_endpoint_exposes_integration_contract() -> None:
 
     assert status == 200
     assert payload["api_version"] == "1"
-    assert payload["version"] == "0.14.0"
+    assert payload["version"] == "0.15.0"
     assert payload["endpoints"] == ["/healthz", "/version", "/capabilities", "/analyze"]
     assert "multi_incident" in payload["features"]
     assert "stable_error_codes" in payload["features"]
     assert "stable_fingerprints" in payload["features"]
-    assert payload["limits"] == {"max_body_bytes": 2048}
+    assert "bounded_concurrency" in payload["features"]
+    assert payload["limits"] == {"max_body_bytes": 2048, "max_concurrent_requests": 4}
+
+
+def test_analyze_endpoint_rejects_when_concurrency_limit_is_reached() -> None:
+    server, thread = _running_server(max_concurrent_requests=1)
+    assert server.request_semaphore.acquire(blocking=False)
+    try:
+        status, payload = _request(server, "POST", "/analyze", {"log": "Permission denied"})
+    finally:
+        server.request_semaphore.release()
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    assert status == 429
+    assert payload == {"code": "concurrency_limit_reached", "error": "concurrency_limit_reached"}
 
 
 def test_analyze_endpoint_returns_structured_incident() -> None:
