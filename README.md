@@ -37,6 +37,8 @@ IncidentAI also provides checks and recommended actions, for example `systemctl 
 - Secure opt-in `--webhook` export for redacted incident payloads
 - Optional HMAC-SHA256 webhook signatures for authenticated delivery
 - Deterministic webhook event IDs for receiver-side idempotency and duplicate detection
+- Optional bounded webhook retries for transient delivery failures
+- Honors numeric `Retry-After` responses for rate limiting and server backpressure
 - Optional OpenAI enrichment behind explicit `--enrich` opt-in and local redaction
 - Docker image support
 - Automated linting, test coverage, package builds, Docker builds, and tagged GitHub releases
@@ -134,6 +136,16 @@ Every webhook also includes `X-IncidentAI-Event-ID`, a deterministic SHA-256 ide
 export INCIDENT_AI_WEBHOOK_SECRET='replace-with-a-random-secret'
 incident-ai analyze app.log --json --redact --webhook https://ops.example.test/incidents
 ```
+
+For transient webhook failures, enable a bounded number of retries:
+
+```bash
+incident-ai analyze app.log --json --redact \
+  --webhook https://ops.example.test/incidents \
+  --webhook-retries 2
+```
+
+Retries are disabled by default. HTTP `429` and `5xx` responses use bounded exponential backoff, but a numeric `Retry-After` response header takes precedence for that attempt. Server-requested delays are capped at 60 seconds. See [`docs/webhook-retry-after.md`](docs/webhook-retry-after.md) for the exact behavior.
 
 For multiple incidents, the webhook receives a JSON array. With `--group-by`, it receives the same grouped JSON structure used by `--json`.
 
