@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented here.
 
+## [0.14.0] - 2026-08-21
+
+### Added
+
+- Add `GET /capabilities` to the local HTTP API for integration feature discovery
+- Report supported endpoints, stable feature identifiers, API/package versions, and the effective request-size limit
+- Keep capability feature identifiers additive so older clients can safely ignore newly advertised features
+- Add regression coverage for capability discovery and configured request-size limits
+
 ## [0.13.0] - 2026-08-21
 
 ### Added
