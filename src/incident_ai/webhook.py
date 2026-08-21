@@ -87,6 +87,41 @@ def _should_retry_http(status: int) -> bool:
     return status == 429 or 500 <= status < 600
 
 
+def _prepare_webhook(payload: object, url: str, *, secret: str | None = None) -> tuple[bytes, str, str | None]:
+    _validate_destination(url)
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    event_id = hashlib.sha256(body).hexdigest()
+    signing_secret = secret if secret is not None else os.environ.get("INCIDENT_AI_WEBHOOK_SECRET")
+    return body, event_id, signing_secret
+
+
+def inspect_webhook(
+    payload: object,
+    url: str,
+    *,
+    timeout: float = 10.0,
+    secret: str | None = None,
+    max_retries: int = 0,
+) -> dict[str, object]:
+    """Validate webhook delivery configuration without sending a request."""
+    if not isinstance(max_retries, int) or isinstance(max_retries, bool):
+        raise WebhookError("webhook max_retries must be an integer")
+    if not 0 <= max_retries <= MAX_WEBHOOK_RETRIES:
+        raise WebhookError(f"webhook max_retries must be between 0 and {MAX_WEBHOOK_RETRIES}")
+    if timeout <= 0:
+        raise WebhookError("webhook timeout must be greater than zero")
+
+    _body, event_id, signing_secret = _prepare_webhook(payload, url, secret=secret)
+    return {
+        "url": url,
+        "event_id": event_id,
+        "signed": signing_secret is not None,
+        "max_retries": max_retries,
+        "timeout": timeout,
+        "sent": False,
+    }
+
+
 def send_webhook(
     payload: object,
     url: str,
@@ -102,11 +137,8 @@ def send_webhook(
         raise WebhookError(f"webhook max_retries must be between 0 and {MAX_WEBHOOK_RETRIES}")
     if timeout <= 0:
         raise WebhookError("webhook timeout must be greater than zero")
-    _validate_destination(url)
 
-    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    event_id = hashlib.sha256(body).hexdigest()
-    signing_secret = secret if secret is not None else os.environ.get("INCIDENT_AI_WEBHOOK_SECRET")
+    body, event_id, signing_secret = _prepare_webhook(payload, url, secret=secret)
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
