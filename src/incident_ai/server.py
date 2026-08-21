@@ -12,20 +12,16 @@ from .redaction import redact_analysis
 
 DEFAULT_MAX_BODY_BYTES = 1_048_576
 API_VERSION = "1"
-API_CAPABILITIES = {
-    "api_version": API_VERSION,
-    "endpoints": ["/healthz", "/version", "/capabilities", "/analyze"],
-    "features": [
-        "multi_incident",
-        "structured_jsonl",
-        "source_filters",
-        "context",
-        "redaction",
-        "stable_error_codes",
-        "stable_fingerprints",
-    ],
-    "limits": {"max_body_bytes": DEFAULT_MAX_BODY_BYTES},
-}
+API_ENDPOINTS = ["/healthz", "/version", "/capabilities", "/analyze"]
+API_FEATURES = [
+    "multi_incident",
+    "structured_jsonl",
+    "source_filters",
+    "context",
+    "redaction",
+    "stable_error_codes",
+    "stable_fingerprints",
+]
 
 
 class APIError(ValueError):
@@ -103,7 +99,13 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
             self._write_json(200, {"api_version": API_VERSION, "version": __version__})
             return
         if self.path == "/capabilities":
-            payload = {**API_CAPABILITIES, "version": __version__}
+            payload = {
+                "api_version": API_VERSION,
+                "version": __version__,
+                "endpoints": API_ENDPOINTS,
+                "features": API_FEATURES,
+                "limits": {"max_body_bytes": self.server.max_body_bytes},  # type: ignore[attr-defined]
+            }
             self._write_json(200, payload)
             return
         self._write_error(404, "not_found", "not_found")
