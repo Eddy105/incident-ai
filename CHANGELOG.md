@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented here.
 
+## [0.13.0] - 2026-08-21
+
+### Added
+
+- Add stable machine-readable error codes to the local HTTP API
+- Preserve the existing `error` messages for backward-compatible diagnostics
+- Add regression coverage for validation, invalid JSON, size-limit, and not-found error codes
+
 ## [0.12.2] - 2026-08-21
 
 ### Added

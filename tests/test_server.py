@@ -50,7 +50,7 @@ def test_version_endpoint_exposes_api_and_package_version() -> None:
         server.server_close()
 
     assert status == 200
-    assert payload == {"api_version": "1", "version": "0.12.2"}
+    assert payload == {"api_version": "1", "version": "0.13.0"}
 
 
 def test_analyze_endpoint_returns_structured_incident() -> None:
@@ -100,7 +100,7 @@ def test_analyze_endpoint_rejects_oversized_body() -> None:
         server.server_close()
 
     assert status == 413
-    assert payload["error"] == "request_body_too_large"
+    assert payload == {"code": "request_body_too_large", "error": "request_body_too_large"}
 
 
 def test_analyze_endpoint_rejects_invalid_payload() -> None:
@@ -113,7 +113,29 @@ def test_analyze_endpoint_rejects_invalid_payload() -> None:
         server.server_close()
 
     assert status == 400
-    assert payload["error"] == "'log' must be a string"
+    assert payload == {"code": "invalid_log", "error": "'log' must be a string"}
+
+
+def test_analyze_endpoint_rejects_invalid_json_with_stable_code() -> None:
+    server, thread = _running_server()
+    url = f"http://127.0.0.1:{server.server_port}/analyze"
+    request = urllib.request.Request(url, data=b"{not-json}", method="POST")
+    request.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(request, timeout=2) as response:
+            status = response.status
+            payload = json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+        payload = json.loads(exc.read())
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    assert status == 400
+    assert payload["code"] == "invalid_json"
+    assert payload["error"].startswith("invalid_json:")
 
 
 def test_unknown_endpoint_is_not_found() -> None:
@@ -126,4 +148,4 @@ def test_unknown_endpoint_is_not_found() -> None:
         server.server_close()
 
     assert status == 404
-    assert payload == {"error": "not_found"}
+    assert payload == {"code": "not_found", "error": "not_found"}

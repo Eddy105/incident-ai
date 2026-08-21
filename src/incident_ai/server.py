@@ -17,22 +17,26 @@ API_VERSION = "1"
 class APIError(ValueError):
     """Raised when an API request is invalid."""
 
+    def __init__(self, message: str, code: str = "invalid_request") -> None:
+        super().__init__(message)
+        self.code = code
+
 
 def _analysis_payload(payload: dict[str, Any]) -> tuple[Any, int]:
     raw_log = payload.get("log")
     if not isinstance(raw_log, str):
-        raise APIError("'log' must be a string")
+        raise APIError("'log' must be a string", "invalid_log")
 
     input_format = payload.get("input_format", "auto")
     if input_format not in {"auto", "text", "jsonl"}:
-        raise APIError("'input_format' must be 'auto', 'text', or 'jsonl'")
+        raise APIError("'input_format' must be 'auto', 'text', or 'jsonl'", "invalid_input_format")
 
     source_filters: dict[str, str] = {}
     for key in ("host", "service", "unit", "container"):
         value = payload.get(key)
         if value is not None:
             if not isinstance(value, str) or not value:
-                raise APIError(f"'{key}' must be a non-empty string when supplied")
+                raise APIError(f"'{key}' must be a non-empty string when supplied", f"invalid_{key}")
             source_filters[key] = value
 
     include_context = payload.get("include_context", False)
@@ -40,7 +44,7 @@ def _analysis_payload(payload: dict[str, Any]) -> tuple[Any, int]:
     redact = payload.get("redact", False)
     for key, value in (("include_context", include_context), ("all", all_incidents), ("redact", redact)):
         if not isinstance(value, bool):
-            raise APIError(f"'{key}' must be a boolean")
+            raise APIError(f"'{key}' must be a boolean", f"invalid_{key}")
 
     try:
         normalized = normalize_input(
@@ -50,7 +54,7 @@ def _analysis_payload(payload: dict[str, Any]) -> tuple[Any, int]:
             source_filters=source_filters,
         )
     except InputFormatError as exc:
-        raise APIError(f"invalid structured input: {exc}") from exc
+        raise APIError(f"invalid structured input: {exc}", "invalid_structured_input") from exc
 
     analyses: tuple[IncidentAnalysis, ...]
     analyses = analyze_all(normalized) if all_incidents else (analyze_text(normalized),)
@@ -74,6 +78,9 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
+    def _write_error(self, status: int, code: str, message: str) -> None:
+        self._write_json(status, {"code": code, "error": message})
+
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/healthz":
             self._write_json(200, {"status": "ok"})
@@ -81,11 +88,11 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
         if self.path == "/version":
             self._write_json(200, {"api_version": API_VERSION, "version": __version__})
             return
-        self._write_json(404, {"error": "not_found"})
+        self._write_error(404, "not_found", "not_found")
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/analyze":
-            self._write_json(404, {"error": "not_found"})
+            self._write_error(404, "not_found", "not_found")
             return
 
         content_length = self.headers.get("Content-Length")
@@ -95,23 +102,23 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
             length = -1
         max_body_bytes = self.server.max_body_bytes  # type: ignore[attr-defined]
         if length < 0 or length > max_body_bytes:
-            self._write_json(413, {"error": "request_body_too_large"})
+            self._write_error(413, "request_body_too_large", "request_body_too_large")
             return
 
         body = self.rfile.read(length)
         if len(body) != length:
-            self._write_json(400, {"error": "incomplete_request_body"})
+            self._write_error(400, "incomplete_request_body", "incomplete_request_body")
             return
         try:
             payload = json.loads(body.decode("utf-8"))
             if not isinstance(payload, dict):
-                raise APIError("request body must be a JSON object")
+                raise APIError("request body must be a JSON object", "invalid_request_body")
             result, status = _analysis_payload(payload)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            self._write_json(400, {"error": f"invalid_json: {exc}"})
+            self._write_error(400, "invalid_json", f"invalid_json: {exc}")
             return
         except APIError as exc:
-            self._write_json(400, {"error": str(exc)})
+            self._write_error(400, exc.code, str(exc))
             return
         self._write_json(status, result)
 

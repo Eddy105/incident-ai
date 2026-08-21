@@ -37,6 +37,32 @@ The request object supports:
 - `host`, `service`, `unit`, `container` source filters
 - `redact` (boolean)
 
+## Stable API errors
+
+Error responses contain both a stable machine-readable `code` and the existing human-readable `error` field:
+
+```json
+{"code":"invalid_log","error":"'log' must be a string"}
+```
+
+Clients should branch on `code`, not on the text of `error`. The `error` field remains available for logs and human diagnostics and is intentionally preserved for backward compatibility.
+
+Current error codes include:
+
+| HTTP | Code | Meaning |
+| --- | --- | --- |
+| 400 | `invalid_json` | Request body is not valid UTF-8 JSON. |
+| 400 | `invalid_request_body` | Request JSON is valid but is not an object. |
+| 400 | `invalid_log` | `log` is missing or is not a string. |
+| 400 | `invalid_input_format` | `input_format` is unsupported. |
+| 400 | `invalid_structured_input` | JSON Lines input failed validation. |
+| 400 | `invalid_<field>` | A supplied boolean or source-filter field is invalid. |
+| 400 | `incomplete_request_body` | The declared request body could not be read completely. |
+| 404 | `not_found` | Endpoint does not exist. |
+| 413 | `request_body_too_large` | Request exceeds the configured body limit. |
+
+New error codes may be added without changing the API major version. Clients should treat unknown codes as generic request failures.
+
 ## Version discovery
 
 ```bash
