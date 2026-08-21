@@ -80,7 +80,7 @@ def test_analyze_endpoint_supports_all() -> None:
 def test_analyze_endpoint_rejects_oversized_body() -> None:
     server, thread = _running_server(max_body_bytes=32)
     try:
-        status, payload = _request(server, "POST", "/analyze", {"log": "Permission denied"})
+        status, payload = _request(server, "POST", "/analyze", {"log": "x" * 64})
     finally:
         server.shutdown()
         thread.join(timeout=2)
