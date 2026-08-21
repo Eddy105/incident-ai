@@ -52,7 +52,7 @@ def test_send_webhook_posts_json(monkeypatch) -> None:
     assert opener.request.full_url == "https://example.test/hook"
     assert json.loads(body) == {"incident_type": "disk_full"}
     assert opener.request.get_header("Content-type") == "application/json"
-    assert opener.request.get_header("User-agent") == "IncidentAI/0.11.3"
+    assert opener.request.get_header("User-agent") == "IncidentAI/0.11.4"
     assert opener.request.get_header("X-incidentai-event-id") == hashlib.sha256(body).hexdigest()
     assert opener.timeout == 3.5
 
@@ -187,6 +187,36 @@ def test_send_webhook_retries_transient_http_errors(monkeypatch) -> None:
 
     assert sleeps == [0.5]
     assert first.request.get_header("X-incidentai-event-id") == second.request.get_header("X-incidentai-event-id")
+
+
+def test_send_webhook_honors_retry_after_header(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    headers = {"Retry-After": "3"}
+    first = _Opener(error=HTTPError("https://example.test/hook", 429, "rate limited", headers, None))
+    second = _Opener(_Response())
+    openers = iter((first, second))
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: next(openers))
+    sleeps = []
+    monkeypatch.setattr("incident_ai.webhook.time.sleep", sleeps.append)
+
+    send_webhook({"incident_type": "rate_limited"}, "https://example.test/hook", max_retries=1)
+
+    assert sleeps == [3.0]
+
+
+def test_send_webhook_caps_retry_after_delay(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    headers = {"Retry-After": "120"}
+    first = _Opener(error=HTTPError("https://example.test/hook", 503, "unavailable", headers, None))
+    second = _Opener(_Response())
+    openers = iter((first, second))
+    monkeypatch.setattr("incident_ai.webhook.build_opener", lambda *_handlers: next(openers))
+    sleeps = []
+    monkeypatch.setattr("incident_ai.webhook.time.sleep", sleeps.append)
+
+    send_webhook({"incident_type": "overloaded"}, "https://example.test/hook", max_retries=1)
+
+    assert sleeps == [60.0]
 
 
 def test_send_webhook_retries_network_errors(monkeypatch) -> None:
