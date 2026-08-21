@@ -13,6 +13,9 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
+MAX_WEBHOOK_RETRIES = 8
+
+
 class WebhookError(RuntimeError):
     """Raised when an incident webhook cannot be delivered."""
 
@@ -92,8 +95,12 @@ def send_webhook(
     max_retries: int = 0,
 ) -> None:
     """POST JSON to a public webhook with optional bounded retries."""
-    if max_retries < 0:
-        raise WebhookError("webhook max_retries must be zero or greater")
+    if not isinstance(max_retries, int) or isinstance(max_retries, bool):
+        raise WebhookError("webhook max_retries must be an integer")
+    if not 0 <= max_retries <= MAX_WEBHOOK_RETRIES:
+        raise WebhookError(f"webhook max_retries must be between 0 and {MAX_WEBHOOK_RETRIES}")
+    if timeout <= 0:
+        raise WebhookError("webhook timeout must be greater than zero")
     _validate_destination(url)
 
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -102,7 +109,7 @@ def send_webhook(
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "IncidentAI/0.11.5",
+        "User-Agent": "IncidentAI/0.11.6",
         "X-IncidentAI-Event-ID": event_id,
     }
 
