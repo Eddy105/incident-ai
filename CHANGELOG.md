@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented here.
 
+## [0.12.2] - 2026-08-21
+
+### Added
+
+- Add `GET /version` to the local HTTP API
+- Expose a stable API major version alongside the running package version for integration compatibility checks
+- Add regression coverage for API and package version metadata
+
 ## [0.12.1] - 2026-08-21
 
 ### Added
