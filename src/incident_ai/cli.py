@@ -19,7 +19,7 @@ from .formatters import (
 )
 from .ingest import InputFormatError, normalize_grouped_input, normalize_input
 from .redaction import redact_analysis
-from .webhook import MAX_WEBHOOK_RETRIES, WebhookError, send_webhook
+from .webhook import MAX_WEBHOOK_RETRIES, WebhookError, inspect_webhook, send_webhook
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -72,11 +72,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Retry transient webhook failures with bounded backoff, from 0 to {MAX_WEBHOOK_RETRIES} retries (default: 0).",
     )
     analyze.add_argument(
+        "--webhook-dry-run",
+        action="store_true",
+        help="Validate webhook configuration and payload metadata without sending a request; requires --webhook and --redact.",
+    )
+    analyze.add_argument(
         "--enrich",
         action="store_true",
-        help=(
-            "Opt in to remote OpenAI enrichment after local analysis and redaction."
-        ),
+        help="Opt in to remote OpenAI enrichment after local analysis and redaction.",
     )
     analyze.add_argument("--model", default="gpt-5.6", help="OpenAI model used with --enrich (default: gpt-5.6).")
     return parser
@@ -113,12 +116,19 @@ def _send_webhook_or_exit(
     *,
     redact: bool,
     max_retries: int,
+    dry_run: bool,
 ) -> None:
     if not url:
+        if dry_run:
+            parser.error("--webhook-dry-run requires --webhook")
         return
     if not redact:
         parser.error("--webhook requires --redact to prevent accidental secret disclosure")
     try:
+        if dry_run:
+            result = inspect_webhook(payload, url, max_retries=max_retries)
+            print(f"incident-ai: webhook dry-run valid: {json.dumps(result, sort_keys=True)}", file=sys.stderr)
+            return
         send_webhook(payload, url, max_retries=max_retries)
     except WebhookError as exc:
         parser.exit(4, f"incident-ai: {exc}\n")
@@ -183,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
             args.webhook,
             redact=args.redact,
             max_retries=args.webhook_retries,
+            dry_run=args.webhook_dry_run,
         )
         if args.sarif:
             print(format_sarif(tuple(item for _value, analyses in groups for item in analyses)))
@@ -209,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
             args.webhook,
             redact=args.redact,
             max_retries=args.webhook_retries,
+            dry_run=args.webhook_dry_run,
         )
 
         if args.sarif:
@@ -232,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
         args.webhook,
         redact=args.redact,
         max_retries=args.webhook_retries,
+        dry_run=args.webhook_dry_run,
     )
 
     if args.sarif:
