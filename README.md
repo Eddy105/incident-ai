@@ -39,6 +39,7 @@ IncidentAI also provides checks and recommended actions, for example `systemctl 
 - Deterministic webhook event IDs for receiver-side idempotency and duplicate detection
 - Optional bounded webhook retries for transient delivery failures
 - Honors numeric `Retry-After` responses for rate limiting and server backpressure
+- Optional webhook dry-run validation without sending a request
 - Optional OpenAI enrichment behind explicit `--enrich` opt-in and local redaction
 - Docker image support
 - Automated linting, test coverage, package builds, Docker builds, and tagged GitHub releases
@@ -146,6 +147,16 @@ incident-ai analyze app.log --json --redact \
 ```
 
 Retries are disabled by default. HTTP `429` and `5xx` responses use bounded exponential backoff, but a numeric `Retry-After` response header takes precedence for that attempt. Server-requested delays are capped at 60 seconds. See [`docs/webhook-retry-after.md`](docs/webhook-retry-after.md) for the exact behavior.
+
+Validate a webhook without sending a request:
+
+```bash
+incident-ai analyze app.log --json --redact \
+  --webhook https://ops.example.test/incidents \
+  --webhook-dry-run
+```
+
+`--webhook-dry-run` performs the same destination and payload validation as delivery, but never creates a POST request. The validation summary is written to stderr so normal analysis output on stdout remains script-friendly. See [`docs/webhook-dry-run.md`](docs/webhook-dry-run.md).
 
 For multiple incidents, the webhook receives a JSON array. With `--group-by`, it receives the same grouped JSON structure used by `--json`.
 

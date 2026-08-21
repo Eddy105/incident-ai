@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented here.
 
+## [0.12.0] - 2026-08-21
+
+### Added
+
+- Add `--webhook-dry-run` to validate webhook destination and payload metadata without sending a request
+- Keep dry-run diagnostics on stderr so normal incident output remains script-friendly on stdout
+- Add `inspect_webhook()` for programmatic configuration validation
+- Preserve the deterministic webhook event ID and HMAC configuration status in dry-run metadata
+- Add regression coverage for dry-run validation and private-destination rejection
+
 ## [0.11.6] - 2026-08-21
 
 ### Security
