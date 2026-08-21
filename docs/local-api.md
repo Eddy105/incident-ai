@@ -18,7 +18,26 @@ The server exposes:
 
 - `GET /healthz` — returns `{"status":"ok"}`.
 - `GET /version` — returns the stable API major version and installed package version.
+- `GET /capabilities` — returns the supported endpoints, features, and effective request-size limit.
 - `POST /analyze` — accepts a JSON request and returns one analysis or a list of analyses.
+
+## Capability discovery
+
+Integrations can query `/capabilities` before sending analysis requests instead of assuming which optional features are available:
+
+```bash
+curl -sS http://127.0.0.1:8080/capabilities
+```
+
+The response contains:
+
+- `api_version` — stable API major version.
+- `version` — installed IncidentAI release.
+- `endpoints` — supported local API endpoints.
+- `features` — supported analysis capabilities, including multi-incident analysis, JSON Lines ingestion, redaction, stable error codes, and stable fingerprints.
+- `limits.max_body_bytes` — effective request body limit for the running server instance.
+
+Feature names are additive. Clients should ignore unknown feature names so a newer IncidentAI release can advertise capabilities without breaking older integrations.
 
 ## Analyze a log
 
@@ -75,7 +94,7 @@ The response contains `api_version` for compatibility decisions and `version` fo
 
 ## Security boundary
 
-The default bind address is loopback-only. The request body is limited to 1 MiB by default to prevent an accidental unbounded memory allocation from a monitoring client.
+The default bind address is loopback-only. The request body is limited to 1 MiB by default to prevent an accidental unbounded memory allocation from a monitoring client. `/capabilities` reports the effective limit for the running instance.
 
 If the server is intentionally exposed beyond localhost, put it behind an authenticated reverse proxy and network policy. The built-in API does not implement authentication, TLS, rate limiting, or user management.
 
