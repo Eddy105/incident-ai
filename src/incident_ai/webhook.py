@@ -55,39 +55,66 @@ def _signature_headers(body: bytes, secret: str | None, timestamp: int) -> dict[
     }
 
 
+def _retry_delay(attempt: int) -> float:
+    return min(0.5 * (2**attempt), 4.0)
+
+
+def _should_retry_http(status: int) -> bool:
+    return status == 429 or 500 <= status < 600
+
+
 def send_webhook(
     payload: object,
     url: str,
     *,
     timeout: float = 10.0,
     secret: str | None = None,
+    max_retries: int = 0,
 ) -> None:
-    """POST JSON to a public webhook with a deterministic event identifier."""
+    """POST JSON to a public webhook with optional bounded retries."""
+    if max_retries < 0:
+        raise WebhookError("webhook max_retries must be zero or greater")
     _validate_destination(url)
 
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     event_id = hashlib.sha256(body).hexdigest()
     signing_secret = secret if secret is not None else os.environ.get("INCIDENT_AI_WEBHOOK_SECRET")
-    timestamp = int(time.time())
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "IncidentAI/0.11",
+        "User-Agent": "IncidentAI/0.11.3",
         "X-IncidentAI-Event-ID": event_id,
-        **_signature_headers(body, signing_secret, timestamp),
     }
-    request = Request(url, data=body, headers=headers, method="POST")
 
-    try:
-        opener = build_opener(_NoRedirectHandler())
-        with opener.open(request, timeout=timeout) as response:
-            if response.status >= 400:
-                raise WebhookError(f"webhook returned HTTP {response.status}")
-    except HTTPError as exc:
-        if 300 <= exc.code < 400:
-            raise WebhookError("webhook redirects are not allowed") from exc
-        raise WebhookError(f"webhook returned HTTP {exc.code}") from exc
-    except URLError as exc:
-        raise WebhookError(f"webhook delivery failed: {exc.reason}") from exc
-    except TimeoutError as exc:
-        raise WebhookError("webhook delivery timed out") from exc
+    for attempt in range(max_retries + 1):
+        timestamp = int(time.time())
+        request_headers = {**headers, **_signature_headers(body, signing_secret, timestamp)}
+        request = Request(url, data=body, headers=request_headers, method="POST")
+        try:
+            opener = build_opener(_NoRedirectHandler())
+            with opener.open(request, timeout=timeout) as response:
+                if response.status >= 400:
+                    if _should_retry_http(response.status) and attempt < max_retries:
+                        time.sleep(_retry_delay(attempt))
+                        continue
+                    raise WebhookError(f"webhook returned HTTP {response.status}")
+                return
+        except HTTPError as exc:
+            if 300 <= exc.code < 400:
+                raise WebhookError("webhook redirects are not allowed") from exc
+            if _should_retry_http(exc.code) and attempt < max_retries:
+                time.sleep(_retry_delay(attempt))
+                continue
+            raise WebhookError(f"webhook returned HTTP {exc.code}") from exc
+        except URLError as exc:
+            if attempt < max_retries:
+                time.sleep(_retry_delay(attempt))
+                continue
+            raise WebhookError(f"webhook delivery failed: {exc.reason}") from exc
+        except TimeoutError as exc:
+            if attempt < max_retries:
+                time.sleep(_retry_delay(attempt))
+                continue
+            raise WebhookError("webhook delivery timed out") from exc
+
+    raise WebhookError("webhook delivery failed after retries")

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented here.
 
+## [0.11.3] - 2026-08-20
+
+### Added
+
+- Add opt-in bounded retries for transient webhook delivery failures
+- Retry HTTP 429 and 5xx responses, network errors, and timeouts with exponential backoff
+- Keep retries disabled by default for backward-compatible delivery behavior
+- Expose retries through `--webhook-retries`
+- Preserve the deterministic event ID across retry attempts
+- Add regression coverage for transient HTTP and network retries
+
 ## [0.11.2] - 2026-08-20
 
 ### Added

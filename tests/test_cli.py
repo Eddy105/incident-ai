@@ -240,9 +240,10 @@ def test_cli_webhook_sends_redacted_structured_analysis(tmp_path: Path, monkeypa
     log.write_text("Permission denied from 10.0.0.5 token=super-secret-value", encoding="utf-8")
     captured = {}
 
-    def fake_send(payload, url):
+    def fake_send(payload, url, **kwargs):
         captured["payload"] = payload
         captured["url"] = url
+        captured["kwargs"] = kwargs
 
     monkeypatch.setattr("incident_ai.cli.send_webhook", fake_send)
 
@@ -250,6 +251,7 @@ def test_cli_webhook_sends_redacted_structured_analysis(tmp_path: Path, monkeypa
 
     assert code == 1
     assert captured["url"] == "https://example.test/incidents"
+    assert captured["kwargs"]["max_retries"] == 0
     serialized = json.dumps(captured["payload"])
     assert "10.0.0.5" not in serialized
     assert "super-secret-value" not in serialized
