@@ -234,5 +234,5 @@ def test_send_webhook_retries_network_errors(monkeypatch) -> None:
 
 
 def test_send_webhook_rejects_negative_retries() -> None:
-    with pytest.raises(WebhookError, match="zero or greater"):
+    with pytest.raises(WebhookError, match="between 0 and 8"):
         send_webhook({}, "https://example.test/hook", max_retries=-1)
