@@ -121,7 +121,9 @@ def send_webhook(
             opener = build_opener(_NoRedirectHandler())
             with opener.open(request, timeout=timeout) as response:
                 if response.status >= 400:
-                    retry_after = getattr(getattr(response, "headers", None), "get", lambda _name: None)("Retry-After")
+                    retry_after = getattr(
+                        getattr(response, "headers", None), "get", lambda _name: None
+                    )("Retry-After")
                     if _should_retry_http(response.status) and attempt < max_retries:
                         time.sleep(_retry_delay(attempt, retry_after))
                         continue
