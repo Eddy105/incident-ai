@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented here.
 
+## [0.12.1] - 2026-08-21
+
+### Added
+
+- Add a dependency-free local HTTP API for monitoring and automation integrations
+- Add `incident-ai-server` with loopback-only `127.0.0.1:8080` defaults
+- Add `GET /healthz` and bounded `POST /analyze` endpoints
+- Support structured input options, source filters, multi-incident analysis, and opt-in redaction through the API
+- Limit request bodies to 1 MiB by default and document the security boundary for non-local deployments
+- Add regression coverage for health checks, analysis, validation errors, and request-size limits
+
 ## [0.12.0] - 2026-08-21
 
 ### Added
