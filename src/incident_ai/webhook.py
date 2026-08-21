@@ -55,7 +55,22 @@ def _signature_headers(body: bytes, secret: str | None, timestamp: int) -> dict[
     }
 
 
-def _retry_delay(attempt: int) -> float:
+def _retry_after_delay(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        seconds = float(value.strip())
+    except ValueError:
+        return None
+    if seconds < 0:
+        return None
+    return min(seconds, 60.0)
+
+
+def _retry_delay(attempt: int, retry_after: str | None = None) -> float:
+    server_delay = _retry_after_delay(retry_after)
+    if server_delay is not None:
+        return server_delay
     return min(0.5 * (2**attempt), 4.0)
 
 
@@ -82,7 +97,7 @@ def send_webhook(
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "IncidentAI/0.11.3",
+        "User-Agent": "IncidentAI/0.11.4",
         "X-IncidentAI-Event-ID": event_id,
     }
 
@@ -94,16 +109,18 @@ def send_webhook(
             opener = build_opener(_NoRedirectHandler())
             with opener.open(request, timeout=timeout) as response:
                 if response.status >= 400:
+                    retry_after = getattr(getattr(response, "headers", None), "get", lambda _name: None)("Retry-After")
                     if _should_retry_http(response.status) and attempt < max_retries:
-                        time.sleep(_retry_delay(attempt))
+                        time.sleep(_retry_delay(attempt, retry_after))
                         continue
                     raise WebhookError(f"webhook returned HTTP {response.status}")
                 return
         except HTTPError as exc:
             if 300 <= exc.code < 400:
                 raise WebhookError("webhook redirects are not allowed") from exc
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
             if _should_retry_http(exc.code) and attempt < max_retries:
-                time.sleep(_retry_delay(attempt))
+                time.sleep(_retry_delay(attempt, retry_after))
                 continue
             raise WebhookError(f"webhook returned HTTP {exc.code}") from exc
         except URLError as exc:
