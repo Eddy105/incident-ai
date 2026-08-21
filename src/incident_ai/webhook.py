@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import email.utils
 import hashlib
 import hmac
 import ipaddress
@@ -7,7 +8,6 @@ import json
 import os
 import socket
 import time
-from email.utils import parsedate_to_datetime
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -67,7 +67,7 @@ def _retry_after_delay(value: str | None) -> float | None:
         seconds = float(stripped)
     except ValueError:
         try:
-            seconds = parsedate_to_datetime(stripped).timestamp() - time.time()
+            seconds = email.utils.parsedate_to_datetime(stripped).timestamp() - time.time()
         except (TypeError, ValueError, OverflowError):
             return None
     if seconds < 0:
