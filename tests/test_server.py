@@ -50,7 +50,7 @@ def test_version_endpoint_exposes_api_and_package_version() -> None:
         server.server_close()
 
     assert status == 200
-    assert payload == {"api_version": "1", "version": "0.13.0"}
+    assert payload == {"api_version": "1", "version": "0.14.0"}
 
 
 def test_capabilities_endpoint_exposes_integration_contract() -> None:
@@ -64,7 +64,7 @@ def test_capabilities_endpoint_exposes_integration_contract() -> None:
 
     assert status == 200
     assert payload["api_version"] == "1"
-    assert payload["version"] == "0.13.0"
+    assert payload["version"] == "0.14.0"
     assert payload["endpoints"] == ["/healthz", "/version", "/capabilities", "/analyze"]
     assert "multi_incident" in payload["features"]
     assert "stable_error_codes" in payload["features"]
