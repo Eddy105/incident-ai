@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented here.
 
+## [0.11.5] - 2026-08-21
+
+### Added
+
+- Support both numeric `Retry-After` delays and HTTP-date values for retryable webhook responses
+- Fall back to bounded exponential backoff when an HTTP-date is invalid or already in the past
+- Add regression coverage for HTTP-date parsing, expiry, and webhook delivery
+
 ## [0.11.4] - 2026-08-21
 
 ### Added
