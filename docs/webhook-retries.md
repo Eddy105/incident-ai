@@ -27,6 +27,15 @@ IncidentAI retries only failures that are plausibly transient:
 
 Client errors such as HTTP 4xx responses other than 429 are not retried. Redirects remain rejected and SSRF destination validation is performed before any request attempt.
 
+## Retry-After
+
+For HTTP `429` and `5xx` responses, IncidentAI honors the standard `Retry-After` header in both supported forms:
+
+- numeric delay-seconds, such as `Retry-After: 3`
+- HTTP-date, such as `Retry-After: Wed, 21 Oct 2015 07:28:00 GMT`
+
+Server-requested delays are capped at 60 seconds. Missing, invalid, or already elapsed HTTP-date values fall back to the normal exponential backoff.
+
 ## Idempotency and signatures
 
 Every retry uses the same serialized request body and therefore the same `X-IncidentAI-Event-ID`. Receivers can use that value as an idempotency key to safely suppress duplicate processing.

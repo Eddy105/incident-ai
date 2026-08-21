@@ -52,7 +52,7 @@ def test_send_webhook_posts_json(monkeypatch) -> None:
     assert opener.request.full_url == "https://example.test/hook"
     assert json.loads(body) == {"incident_type": "disk_full"}
     assert opener.request.get_header("Content-type") == "application/json"
-    assert opener.request.get_header("User-agent") == "IncidentAI/0.11.4"
+    assert opener.request.get_header("User-agent") == "IncidentAI/0.11.5"
     assert opener.request.get_header("X-incidentai-event-id") == hashlib.sha256(body).hexdigest()
     assert opener.timeout == 3.5
 

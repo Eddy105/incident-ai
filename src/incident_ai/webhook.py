@@ -7,6 +7,7 @@ import json
 import os
 import socket
 import time
+from email.utils import parsedate_to_datetime
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -58,10 +59,14 @@ def _signature_headers(body: bytes, secret: str | None, timestamp: int) -> dict[
 def _retry_after_delay(value: str | None) -> float | None:
     if not value:
         return None
+    stripped = value.strip()
     try:
-        seconds = float(value.strip())
+        seconds = float(stripped)
     except ValueError:
-        return None
+        try:
+            seconds = parsedate_to_datetime(stripped).timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError):
+            return None
     if seconds < 0:
         return None
     return min(seconds, 60.0)
@@ -97,7 +102,7 @@ def send_webhook(
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "IncidentAI/0.11.4",
+        "User-Agent": "IncidentAI/0.11.5",
         "X-IncidentAI-Event-ID": event_id,
     }
 
