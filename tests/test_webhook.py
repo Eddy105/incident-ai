@@ -6,7 +6,7 @@ from urllib.error import HTTPError, URLError
 import pytest
 
 from incident_ai import __version__
-from incident_ai.webhook import WebhookError, send_webhook
+from incident_ai.webhook import WebhookError, inspect_webhook, send_webhook
 
 
 class _Response:
@@ -237,3 +237,32 @@ def test_send_webhook_retries_network_errors(monkeypatch) -> None:
 def test_send_webhook_rejects_negative_retries() -> None:
     with pytest.raises(WebhookError, match="between 0 and 8"):
         send_webhook({}, "https://example.test/hook", max_retries=-1)
+
+
+def test_inspect_webhook_validates_without_sending(monkeypatch) -> None:
+    _public_dns(monkeypatch)
+    monkeypatch.setenv("INCIDENT_AI_WEBHOOK_SECRET", "dry-run-secret")
+
+    result = inspect_webhook(
+        {"incident_type": "disk_full"},
+        "https://example.test/hook",
+        timeout=4.5,
+        max_retries=2,
+    )
+
+    assert result["url"] == "https://example.test/hook"
+    assert result["event_id"] == hashlib.sha256(b'{"incident_type":"disk_full"}').hexdigest()
+    assert result["signed"] is True
+    assert result["max_retries"] == 2
+    assert result["timeout"] == 4.5
+    assert result["sent"] is False
+
+
+def test_inspect_webhook_rejects_private_destination(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "incident_ai.webhook.socket.getaddrinfo",
+        lambda *_args, **_kwargs: [(2, 1, 6, "", ("10.0.0.10", 443))],
+    )
+
+    with pytest.raises(WebhookError, match="public IP"):
+        inspect_webhook({}, "https://internal.example.test/hook")
