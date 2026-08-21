@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "incident-ai"
-version = "0.12.0"
+version = "0.12.1"
 description = "Explain common Linux and service incidents from log text."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,6 +30,7 @@ Issues = "https://github.com/Eddy105/incident-ai/issues"
 
 [project.scripts]
 incident-ai = "incident_ai.cli:main"
+incident-ai-server = "incident_ai.server:serve"
 
 [project.optional-dependencies]
 openai = ["openai>=1.0"]
