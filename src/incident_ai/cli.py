@@ -19,7 +19,7 @@ from .formatters import (
 )
 from .ingest import InputFormatError, normalize_grouped_input, normalize_input
 from .redaction import redact_analysis
-from .webhook import WebhookError, send_webhook
+from .webhook import MAX_WEBHOOK_RETRIES, WebhookError, send_webhook
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--webhook-retries",
         type=int,
         default=0,
-        help="Retry transient webhook failures with bounded exponential backoff (default: 0).",
+        help=f"Retry transient webhook failures with bounded backoff, from 0 to {MAX_WEBHOOK_RETRIES} retries (default: 0).",
     )
     analyze.add_argument(
         "--enrich",

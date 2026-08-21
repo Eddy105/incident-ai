@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import email.utils
 import hashlib
 import hmac
 import ipaddress
@@ -7,10 +8,11 @@ import json
 import os
 import socket
 import time
-from email.utils import parsedate_to_datetime
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+MAX_WEBHOOK_RETRIES = 8
 
 
 class WebhookError(RuntimeError):
@@ -64,7 +66,7 @@ def _retry_after_delay(value: str | None) -> float | None:
         seconds = float(stripped)
     except ValueError:
         try:
-            seconds = parsedate_to_datetime(stripped).timestamp() - time.time()
+            seconds = email.utils.parsedate_to_datetime(stripped).timestamp() - time.time()
         except (TypeError, ValueError, OverflowError):
             return None
     if seconds < 0:
@@ -92,8 +94,12 @@ def send_webhook(
     max_retries: int = 0,
 ) -> None:
     """POST JSON to a public webhook with optional bounded retries."""
-    if max_retries < 0:
-        raise WebhookError("webhook max_retries must be zero or greater")
+    if not isinstance(max_retries, int) or isinstance(max_retries, bool):
+        raise WebhookError("webhook max_retries must be an integer")
+    if not 0 <= max_retries <= MAX_WEBHOOK_RETRIES:
+        raise WebhookError(f"webhook max_retries must be between 0 and {MAX_WEBHOOK_RETRIES}")
+    if timeout <= 0:
+        raise WebhookError("webhook timeout must be greater than zero")
     _validate_destination(url)
 
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -114,7 +120,9 @@ def send_webhook(
             opener = build_opener(_NoRedirectHandler())
             with opener.open(request, timeout=timeout) as response:
                 if response.status >= 400:
-                    retry_after = getattr(getattr(response, "headers", None), "get", lambda _name: None)("Retry-After")
+                    retry_after = getattr(
+                        getattr(response, "headers", None), "get", lambda _name: None
+                    )("Retry-After")
                     if _should_retry_http(response.status) and attempt < max_retries:
                         time.sleep(_retry_delay(attempt, retry_after))
                         continue

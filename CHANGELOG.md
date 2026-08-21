@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented here.
 
+## [0.11.6] - 2026-08-21
+
+### Security
+
+- Bound `--webhook-retries` to a maximum of 8 retries so the retry feature cannot create unbounded delivery loops
+- Reject non-positive webhook timeouts before any network request is attempted
+- Validate the retry count type at the webhook API boundary as well as through the CLI
+- Add regression coverage for retry and timeout limits
+
 ## [0.11.5] - 2026-08-21
 
 ### Added
