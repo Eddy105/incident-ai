@@ -15,7 +15,7 @@ from .redaction import redact_analysis
 DEFAULT_MAX_BODY_BYTES = 1_048_576
 DEFAULT_MAX_CONCURRENT_REQUESTS = 16
 API_VERSION = "1"
-API_ENDPOINTS = ["/healthz", "/version", "/capabilities", "/openapi.json", "/analyze"]
+API_ENDPOINTS = ["/healthz", "/version", "/capabilities", "/openapi.json", "/metrics", "/analyze"]
 API_FEATURES = [
     "multi_incident",
     "structured_jsonl",
@@ -28,6 +28,7 @@ API_FEATURES = [
     "content_type_validation",
     "openapi_discovery",
     "request_ids",
+    "prometheus_metrics",
 ]
 
 OPENAPI_DOCUMENT = {
@@ -60,6 +61,12 @@ OPENAPI_DOCUMENT = {
             "get": {
                 "operationId": "openapi",
                 "responses": {"200": {"description": "OpenAPI 3.0.3 document."}},
+            }
+        },
+        "/metrics": {
+            "get": {
+                "operationId": "metrics",
+                "responses": {"200": {"description": "Prometheus text exposition metrics."}},
             }
         },
         "/analyze": {
@@ -115,6 +122,35 @@ class APIError(ValueError):
     def __init__(self, message: str, code: str = "invalid_request") -> None:
         super().__init__(message)
         self.code = code
+
+
+class Metrics:
+    """Thread-safe Prometheus counters with bounded label cardinality."""
+
+    _KNOWN_PATHS = frozenset(API_ENDPOINTS)
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._requests: dict[tuple[str, str, int], int] = {}
+
+    def record(self, method: str, path: str, status: int) -> None:
+        bounded_path = path if path in self._KNOWN_PATHS else "/unknown"
+        key = (method.upper(), bounded_path, status)
+        with self._lock:
+            self._requests[key] = self._requests.get(key, 0) + 1
+
+    def render(self) -> bytes:
+        with self._lock:
+            samples = sorted(self._requests.items())
+        lines = [
+            "# HELP incident_ai_http_requests_total Total HTTP requests handled by IncidentAI.",
+            "# TYPE incident_ai_http_requests_total counter",
+        ]
+        for (method, path, status), count in samples:
+            lines.append(
+                f'incident_ai_http_requests_total{{method="{method}",path="{path}",status="{status}"}} {count}'
+            )
+        return ("\n".join(lines) + "\n").encode("utf-8")
 
 
 def _analysis_payload(payload: dict[str, Any]) -> tuple[Any, int]:
@@ -180,6 +216,18 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
         self.send_header("X-IncidentAI-Request-ID", self.request_id)
         self.end_headers()
         self.wfile.write(encoded)
+        self.server.metrics.record(self.command, self.path, status)  # type: ignore[attr-defined]
+
+    def _write_metrics(self) -> None:
+        encoded = self.server.metrics.render()  # type: ignore[attr-defined]
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-IncidentAI-Request-ID", self.request_id)
+        self.end_headers()
+        self.wfile.write(encoded)
+        self.server.metrics.record(self.command, self.path, 200)  # type: ignore[attr-defined]
 
     def _write_error(self, status: int, code: str, message: str) -> None:
         self._write_json(status, {"code": code, "error": message})
@@ -214,6 +262,9 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/openapi.json":
             self._write_json(200, OPENAPI_DOCUMENT)
+            return
+        if self.path == "/metrics":
+            self._write_metrics()
             return
         self._write_error(404, "not_found", "not_found")
 
@@ -287,6 +338,7 @@ def serve(
     server.max_body_bytes = max_body_bytes  # type: ignore[attr-defined]
     server.max_concurrent_requests = max_concurrent_requests  # type: ignore[attr-defined]
     server.request_semaphore = threading.BoundedSemaphore(max_concurrent_requests)  # type: ignore[attr-defined]
+    server.metrics = Metrics()  # type: ignore[attr-defined]
     try:
         server.serve_forever()
     finally:
