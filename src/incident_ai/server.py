@@ -14,7 +14,7 @@ from .redaction import redact_analysis
 DEFAULT_MAX_BODY_BYTES = 1_048_576
 DEFAULT_MAX_CONCURRENT_REQUESTS = 16
 API_VERSION = "1"
-API_ENDPOINTS = ["/healthz", "/version", "/capabilities", "/analyze"]
+API_ENDPOINTS = ["/healthz", "/version", "/capabilities", "/openapi.json", "/analyze"]
 API_FEATURES = [
     "multi_incident",
     "structured_jsonl",
@@ -25,7 +25,86 @@ API_FEATURES = [
     "stable_fingerprints",
     "bounded_concurrency",
     "content_type_validation",
+    "openapi_discovery",
 ]
+
+OPENAPI_DOCUMENT = {
+    "openapi": "3.0.3",
+    "info": {
+        "title": "IncidentAI Local API",
+        "description": "Dependency-free local HTTP API for IncidentAI monitoring integrations.",
+        "version": __version__,
+    },
+    "paths": {
+        "/healthz": {
+            "get": {
+                "operationId": "health",
+                "responses": {"200": {"description": "Service is healthy."}},
+            }
+        },
+        "/version": {
+            "get": {
+                "operationId": "version",
+                "responses": {"200": {"description": "API and package version metadata."}},
+            }
+        },
+        "/capabilities": {
+            "get": {
+                "operationId": "capabilities",
+                "responses": {"200": {"description": "Supported endpoints, features, and limits."}},
+            }
+        },
+        "/openapi.json": {
+            "get": {
+                "operationId": "openapi",
+                "responses": {"200": {"description": "OpenAPI 3.0.3 document."}},
+            }
+        },
+        "/analyze": {
+            "post": {
+                "operationId": "analyze",
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/AnalyzeRequest"}
+                        }
+                    },
+                },
+                "responses": {
+                    "200": {"description": "Incident analysis result."},
+                    "400": {"description": "Invalid request."},
+                    "413": {"description": "Request body exceeds the configured limit."},
+                    "415": {"description": "Explicit media type is not application/json."},
+                    "429": {"description": "Concurrency limit is exhausted."},
+                },
+            }
+        },
+    },
+    "components": {
+        "schemas": {
+            "AnalyzeRequest": {
+                "type": "object",
+                "required": ["log"],
+                "properties": {
+                    "log": {"type": "string"},
+                    "all": {"type": "boolean", "default": False},
+                    "input_format": {
+                        "type": "string",
+                        "enum": ["auto", "text", "jsonl"],
+                        "default": "auto",
+                    },
+                    "include_context": {"type": "boolean", "default": False},
+                    "host": {"type": "string"},
+                    "service": {"type": "string"},
+                    "unit": {"type": "string"},
+                    "container": {"type": "string"},
+                    "redact": {"type": "boolean", "default": False},
+                },
+            }
+        }
+    },
+}
 
 
 class APIError(ValueError):
@@ -50,13 +129,20 @@ def _analysis_payload(payload: dict[str, Any]) -> tuple[Any, int]:
         value = payload.get(key)
         if value is not None:
             if not isinstance(value, str) or not value:
-                raise APIError(f"'{key}' must be a non-empty string when supplied", f"invalid_{key}")
+                raise APIError(
+                    f"'{key}' must be a non-empty string when supplied",
+                    f"invalid_{key}",
+                )
             source_filters[key] = value
 
     include_context = payload.get("include_context", False)
     all_incidents = payload.get("all", False)
     redact = payload.get("redact", False)
-    for key, value in (("include_context", include_context), ("all", all_incidents), ("redact", redact)):
+    for key, value in (
+        ("include_context", include_context),
+        ("all", all_incidents),
+        ("redact", redact),
+    ):
         if not isinstance(value, bool):
             raise APIError(f"'{key}' must be a boolean", f"invalid_{key}")
 
@@ -114,6 +200,9 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
                 },
             }
             self._write_json(200, payload)
+            return
+        if self.path == "/openapi.json":
+            self._write_json(200, OPENAPI_DOCUMENT)
             return
         self._write_error(404, "not_found", "not_found")
 

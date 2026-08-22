@@ -19,7 +19,20 @@ The server exposes:
 - `GET /healthz` — returns `{"status":"ok"}`.
 - `GET /version` — returns the stable API major version and installed package version.
 - `GET /capabilities` — returns the supported endpoints, features, and effective request-size and concurrency limits.
+- `GET /openapi.json` — returns a dependency-free OpenAPI 3.0.3 document for local API integration.
 - `POST /analyze` — accepts a JSON request and returns one analysis or a list of analyses.
+
+## OpenAPI discovery
+
+Integrations can fetch the machine-readable OpenAPI contract before generating clients or validating requests:
+
+```bash
+curl -sS http://127.0.0.1:8080/openapi.json
+```
+
+The document describes the stable API endpoints, the JSON request fields accepted by `/analyze`, and the principal HTTP error responses. It is generated from the running package so its version and endpoint set stay synchronized with the implementation.
+
+`GET /capabilities` advertises `openapi_discovery` and includes `/openapi.json` in its endpoint list. Feature names remain additive so clients can safely ignore capabilities they do not understand.
 
 ## Capability discovery
 
@@ -34,7 +47,7 @@ The response contains:
 - `api_version` — stable API major version.
 - `version` — installed IncidentAI release.
 - `endpoints` — supported local API endpoints.
-- `features` — supported analysis capabilities, including multi-incident analysis, JSON Lines ingestion, redaction, stable error codes, stable fingerprints, bounded concurrency, and content-type validation.
+- `features` — supported analysis capabilities, including multi-incident analysis, JSON Lines ingestion, redaction, stable error codes, stable fingerprints, bounded concurrency, content-type validation, and OpenAPI discovery.
 - `limits.max_body_bytes` — effective request body limit for the running server instance.
 - `limits.max_concurrent_requests` — maximum number of simultaneous `/analyze` requests.
 
@@ -118,6 +131,8 @@ The response contains `api_version` for compatibility decisions and `version` fo
 ## Security boundary
 
 The default bind address is loopback-only. The request body is limited to 1 MiB by default, concurrent `/analyze` processing is limited to 16 requests by default, and explicit non-JSON content types are rejected. These bounds and protocol validation prevent accidental monitoring clients from causing unbounded memory or analysis-thread pressure and make the HTTP contract deterministic. `/capabilities` reports the effective resource limits for the running instance.
+
+The OpenAPI document is descriptive only; it does not add authentication, TLS, rate limiting, or user management.
 
 If the server is intentionally exposed beyond localhost, put it behind an authenticated reverse proxy and network policy. The built-in API does not implement authentication, TLS, rate limiting, or user management. The concurrency bound is a resource-protection control, not an authentication or rate-limiting mechanism.
 

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented here.
 
+## [0.17.0] - 2026-08-22
+
+### Added
+
+- Add `GET /openapi.json` with a dependency-free OpenAPI 3.0.3 description of the local API
+- Advertise OpenAPI discovery through `GET /capabilities` and the `openapi_discovery` feature identifier
+- Include request and response integration metadata for health, version, capabilities, and analysis endpoints
+- Add regression coverage for the OpenAPI endpoint and API endpoint discovery
+
 ## [0.16.0] - 2026-08-22
 
 ### Added
