@@ -16,12 +16,12 @@ def _running_server(max_body_bytes: int = 1024 * 1024, max_concurrent_requests: 
     return server, thread
 
 
-def _request(server, method: str, path: str, body: object | None = None):
+def _request(server, method: str, path: str, body: object | None = None, content_type: str | None = None):
     url = f"http://127.0.0.1:{server.server_port}{path}"
     data = None if body is None else json.dumps(body).encode("utf-8")
     request = urllib.request.Request(url, data=data, method=method)
-    if data is not None:
-        request.add_header("Content-Type", "application/json")
+    if data is not None and content_type is not None:
+        request.add_header("Content-Type", content_type)
     try:
         with urllib.request.urlopen(request, timeout=2) as response:
             return response.status, json.loads(response.read())
@@ -79,7 +79,7 @@ def test_analyze_endpoint_rejects_when_concurrency_limit_is_reached() -> None:
     server, thread = _running_server(max_concurrent_requests=1)
     assert server.request_semaphore.acquire(blocking=False)
     try:
-        status, payload = _request(server, "POST", "/analyze", {"log": "Permission denied"})
+        status, payload = _request(server, "POST", "/analyze", {"log": "Permission denied"}, "application/json")
     finally:
         server.request_semaphore.release()
         server.shutdown()
@@ -98,6 +98,7 @@ def test_analyze_endpoint_returns_structured_incident() -> None:
             "POST",
             "/analyze",
             {"log": "Permission denied", "redact": True},
+            "application/json",
         )
     finally:
         server.shutdown()
@@ -117,6 +118,7 @@ def test_analyze_endpoint_supports_all() -> None:
             "POST",
             "/analyze",
             {"log": "Permission denied\nNo space left on device", "all": True},
+            "application/json",
         )
     finally:
         server.shutdown()
@@ -130,7 +132,7 @@ def test_analyze_endpoint_supports_all() -> None:
 def test_analyze_endpoint_rejects_oversized_body() -> None:
     server, thread = _running_server(max_body_bytes=32)
     try:
-        status, payload = _request(server, "POST", "/analyze", {"log": "x" * 64})
+        status, payload = _request(server, "POST", "/analyze", {"log": "x" * 64}, "application/json")
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -143,7 +145,7 @@ def test_analyze_endpoint_rejects_oversized_body() -> None:
 def test_analyze_endpoint_rejects_invalid_payload() -> None:
     server, thread = _running_server()
     try:
-        status, payload = _request(server, "POST", "/analyze", {"log": 123})
+        status, payload = _request(server, "POST", "/analyze", {"log": 123}, "application/json")
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -173,6 +175,38 @@ def test_analyze_endpoint_rejects_invalid_json_with_stable_code() -> None:
     assert status == 400
     assert payload["code"] == "invalid_json"
     assert payload["error"].startswith("invalid_json:")
+
+
+def test_analyze_endpoint_rejects_unsupported_media_type() -> None:
+    server, thread = _running_server()
+    try:
+        status, payload = _request(
+            server,
+            "POST",
+            "/analyze",
+            {"log": "Permission denied"},
+            "text/plain; charset=utf-8",
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    assert status == 415
+    assert payload == {"code": "unsupported_media_type", "error": "unsupported_media_type"}
+
+
+def test_analyze_endpoint_allows_legacy_missing_content_type() -> None:
+    server, thread = _running_server()
+    try:
+        status, payload = _request(server, "POST", "/analyze", {"log": "Permission denied"})
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    assert status == 200
+    assert payload["incident_type"] == "permission_denied"
 
 
 def test_unknown_endpoint_is_not_found() -> None:
