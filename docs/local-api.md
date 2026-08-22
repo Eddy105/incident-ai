@@ -18,7 +18,7 @@ The server exposes:
 
 - `GET /healthz` — returns `{"status":"ok"}`.
 - `GET /version` — returns the stable API major version and installed package version.
-- `GET /capabilities` — returns the supported endpoints, features, and effective request-size limit.
+- `GET /capabilities` — returns the supported endpoints, features, and effective request-size and concurrency limits.
 - `POST /analyze` — accepts a JSON request and returns one analysis or a list of analyses.
 
 ## Capability discovery
@@ -34,8 +34,9 @@ The response contains:
 - `api_version` — stable API major version.
 - `version` — installed IncidentAI release.
 - `endpoints` — supported local API endpoints.
-- `features` — supported analysis capabilities, including multi-incident analysis, JSON Lines ingestion, redaction, stable error codes, and stable fingerprints.
+- `features` — supported analysis capabilities, including multi-incident analysis, JSON Lines ingestion, redaction, stable error codes, stable fingerprints, and bounded concurrency.
 - `limits.max_body_bytes` — effective request body limit for the running server instance.
+- `limits.max_concurrent_requests` — maximum number of simultaneous `/analyze` requests.
 
 Feature names are additive. Clients should ignore unknown feature names so a newer IncidentAI release can advertise capabilities without breaking older integrations.
 
@@ -55,6 +56,20 @@ The request object supports:
 - `include_context` (boolean)
 - `host`, `service`, `unit`, `container` source filters
 - `redact` (boolean)
+
+## Concurrency limit
+
+The local API uses a bounded semaphore around `/analyze` processing. The default is **16 concurrent requests**. When all slots are occupied, new analysis requests receive HTTP `429` with the stable code `concurrency_limit_reached` instead of creating additional unbounded analysis pressure.
+
+Embedding applications can configure the limit through `serve()`:
+
+```python
+from incident_ai.server import serve
+
+serve(max_concurrent_requests=32)
+```
+
+The configured value is advertised through `/capabilities`. Keep the limit appropriate for the available CPU and memory when running the API under sustained monitoring load.
 
 ## Stable API errors
 
@@ -79,6 +94,7 @@ Current error codes include:
 | 400 | `incomplete_request_body` | The declared request body could not be read completely. |
 | 404 | `not_found` | Endpoint does not exist. |
 | 413 | `request_body_too_large` | Request exceeds the configured body limit. |
+| 429 | `concurrency_limit_reached` | The configured concurrent analysis budget is exhausted. |
 
 New error codes may be added without changing the API major version. Clients should treat unknown codes as generic request failures.
 
@@ -94,8 +110,8 @@ The response contains `api_version` for compatibility decisions and `version` fo
 
 ## Security boundary
 
-The default bind address is loopback-only. The request body is limited to 1 MiB by default to prevent an accidental unbounded memory allocation from a monitoring client. `/capabilities` reports the effective limit for the running instance.
+The default bind address is loopback-only. The request body is limited to 1 MiB by default, and concurrent `/analyze` processing is limited to 16 requests by default. These bounds prevent an accidental monitoring client from causing unbounded memory or analysis-thread pressure. `/capabilities` reports the effective limits for the running instance.
 
-If the server is intentionally exposed beyond localhost, put it behind an authenticated reverse proxy and network policy. The built-in API does not implement authentication, TLS, rate limiting, or user management.
+If the server is intentionally exposed beyond localhost, put it behind an authenticated reverse proxy and network policy. The built-in API does not implement authentication, TLS, rate limiting, or user management. The concurrency bound is a resource-protection control, not an authentication or rate-limiting mechanism.
 
-For programmatic use, `serve(host, port, max_body_bytes=...)` allows an embedding application to choose the listener and request-size limit.
+For programmatic use, `serve(host, port, max_body_bytes=..., max_concurrent_requests=...)` allows an embedding application to choose the listener, request-size limit, and concurrency budget.
