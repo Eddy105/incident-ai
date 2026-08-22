@@ -20,6 +20,7 @@ The server exposes:
 - `GET /version` — returns the stable API major version and installed package version.
 - `GET /capabilities` — returns the supported endpoints, features, and effective request-size and concurrency limits.
 - `GET /openapi.json` — returns a dependency-free OpenAPI 3.0.3 document for local API integration.
+- `GET /metrics` — returns dependency-free Prometheus text exposition metrics.
 - `POST /analyze` — accepts a JSON request and returns one analysis or a list of analyses.
 
 ## Request correlation
@@ -35,6 +36,20 @@ X-IncidentAI-Request-ID: 9c4e1f2a8f4a4c9f8f5b4b7d9e4b2a10
 Request IDs are present on successful responses and errors, including `404`, `413`, `415`, and `429` responses. Clients should treat the value as opaque and should not infer ordering or identity semantics from its format.
 
 `GET /capabilities` advertises the `request_ids` feature. The feature is additive and does not change API major version `1`.
+
+## Prometheus metrics
+
+Monitoring systems can scrape `/metrics` without installing a Prometheus client library:
+
+```bash
+curl -sS http://127.0.0.1:8080/metrics
+```
+
+The endpoint uses the Prometheus text exposition format and currently exposes the `incident_ai_http_requests_total` counter with method, bounded endpoint path, and HTTP status labels. Unknown request paths are normalized to `/unknown` so an attacker or noisy client cannot create unbounded metric label cardinality.
+
+Metrics are in-memory and reset when the process restarts. The metrics endpoint is read-only and does not expose log contents, incident evidence, credentials, or request bodies.
+
+`GET /capabilities` advertises the `prometheus_metrics` feature and includes `/metrics` in its endpoint list. Feature names remain additive so clients can safely ignore capabilities they do not understand.
 
 ## OpenAPI discovery
 
@@ -61,7 +76,7 @@ The response contains:
 - `api_version` — stable API major version.
 - `version` — installed IncidentAI release.
 - `endpoints` — supported local API endpoints.
-- `features` — supported analysis capabilities, including multi-incident analysis, JSON Lines ingestion, redaction, stable error codes, stable fingerprints, bounded concurrency, content-type validation, OpenAPI discovery, and request IDs.
+- `features` — supported analysis capabilities, including multi-incident analysis, JSON Lines ingestion, redaction, stable error codes, stable fingerprints, bounded concurrency, content-type validation, OpenAPI discovery, request IDs, and Prometheus metrics.
 - `limits.max_body_bytes` — effective request body limit for the running server instance.
 - `limits.max_concurrent_requests` — maximum number of simultaneous `/analyze` requests.
 
@@ -146,7 +161,7 @@ The response contains `api_version` for compatibility decisions and `version` fo
 
 The default bind address is loopback-only. The request body is limited to 1 MiB by default, concurrent `/analyze` processing is limited to 16 requests by default, and explicit non-JSON content types are rejected. These bounds and protocol validation prevent accidental monitoring clients from causing unbounded memory or analysis-thread pressure and make the HTTP contract deterministic. `/capabilities` reports the effective resource limits for the running instance.
 
-The OpenAPI document is descriptive only; it does not add authentication, TLS, rate limiting, or user management. Request IDs are correlation metadata only and do not provide authentication, authorization, or request deduplication.
+The OpenAPI document is descriptive only; it does not add authentication, TLS, rate limiting, or user management. Request IDs are correlation metadata only and do not provide authentication, authorization, or request deduplication. Prometheus metrics are aggregate in-memory counters and do not contain request bodies or incident evidence.
 
 If the server is intentionally exposed beyond localhost, put it behind an authenticated reverse proxy and network policy. The built-in API does not implement authentication, TLS, rate limiting, or user management. The concurrency bound is a resource-protection control, not an authentication or rate-limiting mechanism.
 
