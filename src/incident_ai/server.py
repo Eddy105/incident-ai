@@ -24,6 +24,7 @@ API_FEATURES = [
     "stable_error_codes",
     "stable_fingerprints",
     "bounded_concurrency",
+    "content_type_validation",
 ]
 
 
@@ -129,6 +130,11 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
     def _do_post(self) -> None:
         if self.path != "/analyze":
             self._write_error(404, "not_found", "not_found")
+            return
+
+        content_type = self.headers.get("Content-Type")
+        if content_type and content_type.split(";", 1)[0].strip().lower() != "application/json":
+            self._write_error(415, "unsupported_media_type", "unsupported_media_type")
             return
 
         content_length = self.headers.get("Content-Length")
