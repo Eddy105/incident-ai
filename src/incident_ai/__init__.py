@@ -4,4 +4,4 @@ from .analyzer import analyze_all, analyze_text
 from .models import IncidentAnalysis
 
 __all__ = ["IncidentAnalysis", "analyze_all", "analyze_text"]
-__version__ = "0.18.0"
+__version__ = "0.19.0"
