@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -26,6 +27,7 @@ API_FEATURES = [
     "bounded_concurrency",
     "content_type_validation",
     "openapi_discovery",
+    "request_ids",
 ]
 
 OPENAPI_DOCUMENT = {
@@ -175,11 +177,20 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(encoded)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-IncidentAI-Request-ID", self.request_id)
         self.end_headers()
         self.wfile.write(encoded)
 
     def _write_error(self, status: int, code: str, message: str) -> None:
         self._write_json(status, {"code": code, "error": message})
+
+    @property
+    def request_id(self) -> str:
+        request_id = getattr(self, "_request_id", None)
+        if request_id is None:
+            request_id = uuid.uuid4().hex
+            self._request_id = request_id
+        return request_id
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/healthz":

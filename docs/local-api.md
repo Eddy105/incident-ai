@@ -22,6 +22,20 @@ The server exposes:
 - `GET /openapi.json` — returns a dependency-free OpenAPI 3.0.3 document for local API integration.
 - `POST /analyze` — accepts a JSON request and returns one analysis or a list of analyses.
 
+## Request correlation
+
+Every local API response includes a unique `X-IncidentAI-Request-ID` header. The identifier is generated independently for each HTTP request and is useful for correlating monitoring events, client logs, reverse-proxy records, and IncidentAI responses without changing the existing JSON response bodies.
+
+Example:
+
+```text
+X-IncidentAI-Request-ID: 9c4e1f2a8f4a4c9f8f5b4b7d9e4b2a10
+```
+
+Request IDs are present on successful responses and errors, including `404`, `413`, `415`, and `429` responses. Clients should treat the value as opaque and should not infer ordering or identity semantics from its format.
+
+`GET /capabilities` advertises the `request_ids` feature. The feature is additive and does not change API major version `1`.
+
 ## OpenAPI discovery
 
 Integrations can fetch the machine-readable OpenAPI contract before generating clients or validating requests:
@@ -47,7 +61,7 @@ The response contains:
 - `api_version` — stable API major version.
 - `version` — installed IncidentAI release.
 - `endpoints` — supported local API endpoints.
-- `features` — supported analysis capabilities, including multi-incident analysis, JSON Lines ingestion, redaction, stable error codes, stable fingerprints, bounded concurrency, content-type validation, and OpenAPI discovery.
+- `features` — supported analysis capabilities, including multi-incident analysis, JSON Lines ingestion, redaction, stable error codes, stable fingerprints, bounded concurrency, content-type validation, OpenAPI discovery, and request IDs.
 - `limits.max_body_bytes` — effective request body limit for the running server instance.
 - `limits.max_concurrent_requests` — maximum number of simultaneous `/analyze` requests.
 
@@ -132,7 +146,7 @@ The response contains `api_version` for compatibility decisions and `version` fo
 
 The default bind address is loopback-only. The request body is limited to 1 MiB by default, concurrent `/analyze` processing is limited to 16 requests by default, and explicit non-JSON content types are rejected. These bounds and protocol validation prevent accidental monitoring clients from causing unbounded memory or analysis-thread pressure and make the HTTP contract deterministic. `/capabilities` reports the effective resource limits for the running instance.
 
-The OpenAPI document is descriptive only; it does not add authentication, TLS, rate limiting, or user management.
+The OpenAPI document is descriptive only; it does not add authentication, TLS, rate limiting, or user management. Request IDs are correlation metadata only and do not provide authentication, authorization, or request deduplication.
 
 If the server is intentionally exposed beyond localhost, put it behind an authenticated reverse proxy and network policy. The built-in API does not implement authentication, TLS, rate limiting, or user management. The concurrency bound is a resource-protection control, not an authentication or rate-limiting mechanism.
 

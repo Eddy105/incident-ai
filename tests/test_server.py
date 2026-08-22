@@ -25,15 +25,15 @@ def _request(server, method: str, path: str, body: object | None = None, content
         request.add_header("Content-Type", content_type)
     try:
         with urllib.request.urlopen(request, timeout=2) as response:
-            return response.status, json.loads(response.read())
+            return response.status, json.loads(response.read()), response.headers
     except urllib.error.HTTPError as exc:
-        return exc.code, json.loads(exc.read())
+        return exc.code, json.loads(exc.read()), exc.headers
 
 
-def test_health_endpoint() -> None:
+def test_health_endpoint():
     server, thread = _running_server()
     try:
-        status, payload = _request(server, "GET", "/healthz")
+        status, payload, headers = _request(server, "GET", "/healthz")
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -41,25 +41,53 @@ def test_health_endpoint() -> None:
 
     assert status == 200
     assert payload == {"status": "ok"}
+    assert len(headers["X-IncidentAI-Request-ID"]) == 32
 
 
-def test_version_endpoint_exposes_api_and_package_version() -> None:
+def test_request_ids_are_unique_per_request():
     server, thread = _running_server()
     try:
-        status, payload = _request(server, "GET", "/version")
+        first = _request(server, "GET", "/healthz")[2]["X-IncidentAI-Request-ID"]
+        second = _request(server, "GET", "/healthz")[2]["X-IncidentAI-Request-ID"]
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    assert first != second
+
+
+def test_error_responses_include_request_id():
+    server, thread = _running_server()
+    try:
+        status, payload, headers = _request(server, "GET", "/missing")
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    assert status == 404
+    assert payload == {"code": "not_found", "error": "not_found"}
+    assert len(headers["X-IncidentAI-Request-ID"]) == 32
+
+
+def test_version_endpoint_exposes_api_and_package_version():
+    server, thread = _running_server()
+    try:
+        status, payload, _ = _request(server, "GET", "/version")
     finally:
         server.shutdown()
         thread.join(timeout=2)
         server.server_close()
 
     assert status == 200
-    assert payload == {"api_version": "1", "version": "0.17.0"}
+    assert payload == {"api_version": "1", "version": "0.18.0"}
 
 
-def test_capabilities_endpoint_exposes_integration_contract() -> None:
+def test_capabilities_endpoint_exposes_integration_contract():
     server, thread = _running_server(max_body_bytes=2048, max_concurrent_requests=4)
     try:
-        status, payload = _request(server, "GET", "/capabilities")
+        status, payload, _ = _request(server, "GET", "/capabilities")
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -67,7 +95,7 @@ def test_capabilities_endpoint_exposes_integration_contract() -> None:
 
     assert status == 200
     assert payload["api_version"] == "1"
-    assert payload["version"] == "0.17.0"
+    assert payload["version"] == "0.18.0"
     assert payload["endpoints"] == ["/healthz", "/version", "/capabilities", "/openapi.json", "/analyze"]
     assert "multi_incident" in payload["features"]
     assert "stable_error_codes" in payload["features"]
@@ -75,13 +103,14 @@ def test_capabilities_endpoint_exposes_integration_contract() -> None:
     assert "bounded_concurrency" in payload["features"]
     assert "content_type_validation" in payload["features"]
     assert "openapi_discovery" in payload["features"]
+    assert "request_ids" in payload["features"]
     assert payload["limits"] == {"max_body_bytes": 2048, "max_concurrent_requests": 4}
 
 
-def test_openapi_endpoint_exposes_local_api_contract() -> None:
+def test_openapi_endpoint_exposes_local_api_contract():
     server, thread = _running_server()
     try:
-        status, payload = _request(server, "GET", "/openapi.json")
+        status, payload, _ = _request(server, "GET", "/openapi.json")
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -89,16 +118,16 @@ def test_openapi_endpoint_exposes_local_api_contract() -> None:
 
     assert status == 200
     assert payload["openapi"] == "3.0.3"
-    assert payload["info"]["version"] == "0.17.0"
+    assert payload["info"]["version"] == "0.18.0"
     assert set(payload["paths"]) == {"/healthz", "/version", "/capabilities", "/openapi.json", "/analyze"}
     assert payload["paths"]["/analyze"]["post"]["requestBody"]["content"]["application/json"]
 
 
-def test_analyze_endpoint_rejects_when_concurrency_limit_is_reached() -> None:
+def test_analyze_endpoint_rejects_when_concurrency_limit_is_reached():
     server, thread = _running_server(max_concurrent_requests=1)
     assert server.request_semaphore.acquire(blocking=False)
     try:
-        status, payload = _request(server, "POST", "/analyze", {"log": "Permission denied"}, "application/json")
+        status, payload, headers = _request(server, "POST", "/analyze", {"log": "Permission denied"}, "application/json")
     finally:
         server.request_semaphore.release()
         server.shutdown()
@@ -107,12 +136,13 @@ def test_analyze_endpoint_rejects_when_concurrency_limit_is_reached() -> None:
 
     assert status == 429
     assert payload == {"code": "concurrency_limit_reached", "error": "concurrency_limit_reached"}
+    assert len(headers["X-IncidentAI-Request-ID"]) == 32
 
 
-def test_analyze_endpoint_returns_structured_incident() -> None:
+def test_analyze_endpoint_returns_structured_incident():
     server, thread = _running_server()
     try:
-        status, payload = _request(
+        status, payload, headers = _request(
             server,
             "POST",
             "/analyze",
@@ -127,12 +157,13 @@ def test_analyze_endpoint_returns_structured_incident() -> None:
     assert status == 200
     assert payload["incident_type"] == "permission_denied"
     assert payload["fingerprint"]
+    assert len(headers["X-IncidentAI-Request-ID"]) == 32
 
 
-def test_analyze_endpoint_supports_all() -> None:
+def test_analyze_endpoint_supports_all():
     server, thread = _running_server()
     try:
-        status, payload = _request(
+        status, payload, _ = _request(
             server,
             "POST",
             "/analyze",
@@ -148,10 +179,10 @@ def test_analyze_endpoint_supports_all() -> None:
     assert [item["incident_type"] for item in payload] == ["disk_full", "permission_denied"]
 
 
-def test_analyze_endpoint_rejects_oversized_body() -> None:
+def test_analyze_endpoint_rejects_oversized_body():
     server, thread = _running_server(max_body_bytes=32)
     try:
-        status, payload = _request(server, "POST", "/analyze", {"log": "x" * 64}, "application/json")
+        status, payload, _ = _request(server, "POST", "/analyze", {"log": "x" * 64}, "application/json")
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -161,10 +192,10 @@ def test_analyze_endpoint_rejects_oversized_body() -> None:
     assert payload == {"code": "request_body_too_large", "error": "request_body_too_large"}
 
 
-def test_analyze_endpoint_rejects_invalid_payload() -> None:
+def test_analyze_endpoint_rejects_invalid_payload():
     server, thread = _running_server()
     try:
-        status, payload = _request(server, "POST", "/analyze", {"log": 123}, "application/json")
+        status, payload, _ = _request(server, "POST", "/analyze", {"log": 123}, "application/json")
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -174,7 +205,7 @@ def test_analyze_endpoint_rejects_invalid_payload() -> None:
     assert payload == {"code": "invalid_log", "error": "'log' must be a string"}
 
 
-def test_analyze_endpoint_rejects_invalid_json_with_stable_code() -> None:
+def test_analyze_endpoint_rejects_invalid_json_with_stable_code():
     server, thread = _running_server()
     url = f"http://127.0.0.1:{server.server_port}/analyze"
     request = urllib.request.Request(url, data=b"{not-json}", method="POST")
@@ -183,9 +214,11 @@ def test_analyze_endpoint_rejects_invalid_json_with_stable_code() -> None:
         with urllib.request.urlopen(request, timeout=2) as response:
             status = response.status
             payload = json.loads(response.read())
+            headers = response.headers
     except urllib.error.HTTPError as exc:
         status = exc.code
         payload = json.loads(exc.read())
+        headers = exc.headers
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -194,12 +227,13 @@ def test_analyze_endpoint_rejects_invalid_json_with_stable_code() -> None:
     assert status == 400
     assert payload["code"] == "invalid_json"
     assert payload["error"].startswith("invalid_json:")
+    assert len(headers["X-IncidentAI-Request-ID"]) == 32
 
 
-def test_analyze_endpoint_rejects_unsupported_media_type() -> None:
+def test_analyze_endpoint_rejects_unsupported_media_type():
     server, thread = _running_server()
     try:
-        status, payload = _request(
+        status, payload, _ = _request(
             server,
             "POST",
             "/analyze",
@@ -215,7 +249,7 @@ def test_analyze_endpoint_rejects_unsupported_media_type() -> None:
     assert payload == {"code": "unsupported_media_type", "error": "unsupported_media_type"}
 
 
-def test_analyze_endpoint_allows_legacy_missing_content_type() -> None:
+def test_analyze_endpoint_allows_legacy_missing_content_type():
     server, thread = _running_server()
     try:
         connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
@@ -226,6 +260,7 @@ def test_analyze_endpoint_allows_legacy_missing_content_type() -> None:
         response = connection.getresponse()
         status = response.status
         payload = json.loads(response.read())
+        headers = response.headers
         connection.close()
     finally:
         server.shutdown()
@@ -234,12 +269,13 @@ def test_analyze_endpoint_allows_legacy_missing_content_type() -> None:
 
     assert status == 200
     assert payload["incident_type"] == "permission_denied"
+    assert len(headers["X-IncidentAI-Request-ID"]) == 32
 
 
-def test_unknown_endpoint_is_not_found() -> None:
+def test_unknown_endpoint_is_not_found():
     server, thread = _running_server()
     try:
-        status, payload = _request(server, "GET", "/missing")
+        status, payload, _ = _request(server, "GET", "/missing")
     finally:
         server.shutdown()
         thread.join(timeout=2)
