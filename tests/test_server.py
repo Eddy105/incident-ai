@@ -1,3 +1,4 @@
+import http.client
 import json
 import threading
 import urllib.error
@@ -200,7 +201,15 @@ def test_analyze_endpoint_rejects_unsupported_media_type() -> None:
 def test_analyze_endpoint_allows_legacy_missing_content_type() -> None:
     server, thread = _running_server()
     try:
-        status, payload = _request(server, "POST", "/analyze", {"log": "Permission denied"})
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+        connection.putrequest("POST", "/analyze")
+        body = json.dumps({"log": "Permission denied"}).encode("utf-8")
+        connection.putheader("Content-Length", str(len(body)))
+        connection.endheaders(body)
+        response = connection.getresponse()
+        status = response.status
+        payload = json.loads(response.read())
+        connection.close()
     finally:
         server.shutdown()
         thread.join(timeout=2)
