@@ -4,7 +4,7 @@ import threading
 import urllib.error
 import urllib.request
 
-from incident_ai.server import IncidentAPIHandler, ThreadingHTTPServer
+from incident_ai.server import IncidentAPIHandler, Metrics, ThreadingHTTPServer
 
 
 def _running_server(max_body_bytes: int = 1024 * 1024, max_concurrent_requests: int = 16):
@@ -12,6 +12,7 @@ def _running_server(max_body_bytes: int = 1024 * 1024, max_concurrent_requests: 
     server.max_body_bytes = max_body_bytes
     server.max_concurrent_requests = max_concurrent_requests
     server.request_semaphore = threading.BoundedSemaphore(max_concurrent_requests)
+    server.metrics = Metrics()
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
@@ -25,9 +26,15 @@ def _request(server, method: str, path: str, body: object | None = None, content
         request.add_header("Content-Type", content_type)
     try:
         with urllib.request.urlopen(request, timeout=2) as response:
-            return response.status, json.loads(response.read()), response.headers
+            body = response.read()
+            if response.headers.get_content_type() == "application/json":
+                body = json.loads(body)
+            return response.status, body, response.headers
     except urllib.error.HTTPError as exc:
-        return exc.code, json.loads(exc.read()), exc.headers
+        body = exc.read()
+        if exc.headers.get_content_type() == "application/json":
+            body = json.loads(body)
+        return exc.code, body, exc.headers
 
 
 def test_health_endpoint():
@@ -81,7 +88,7 @@ def test_version_endpoint_exposes_api_and_package_version():
         server.server_close()
 
     assert status == 200
-    assert payload == {"api_version": "1", "version": "0.18.0"}
+    assert payload == {"api_version": "1", "version": "0.19.0"}
 
 
 def test_capabilities_endpoint_exposes_integration_contract():
@@ -95,8 +102,8 @@ def test_capabilities_endpoint_exposes_integration_contract():
 
     assert status == 200
     assert payload["api_version"] == "1"
-    assert payload["version"] == "0.18.0"
-    assert payload["endpoints"] == ["/healthz", "/version", "/capabilities", "/openapi.json", "/analyze"]
+    assert payload["version"] == "0.19.0"
+    assert payload["endpoints"] == ["/healthz", "/version", "/capabilities", "/openapi.json", "/metrics", "/analyze"]
     assert "multi_incident" in payload["features"]
     assert "stable_error_codes" in payload["features"]
     assert "stable_fingerprints" in payload["features"]
@@ -104,6 +111,7 @@ def test_capabilities_endpoint_exposes_integration_contract():
     assert "content_type_validation" in payload["features"]
     assert "openapi_discovery" in payload["features"]
     assert "request_ids" in payload["features"]
+    assert "prometheus_metrics" in payload["features"]
     assert payload["limits"] == {"max_body_bytes": 2048, "max_concurrent_requests": 4}
 
 
@@ -118,9 +126,48 @@ def test_openapi_endpoint_exposes_local_api_contract():
 
     assert status == 200
     assert payload["openapi"] == "3.0.3"
-    assert payload["info"]["version"] == "0.18.0"
-    assert set(payload["paths"]) == {"/healthz", "/version", "/capabilities", "/openapi.json", "/analyze"}
+    assert payload["info"]["version"] == "0.19.0"
+    assert set(payload["paths"]) == {"/healthz", "/version", "/capabilities", "/openapi.json", "/metrics", "/analyze"}
     assert payload["paths"]["/analyze"]["post"]["requestBody"]["content"]["application/json"]
+
+
+def test_metrics_endpoint_exposes_prometheus_counters():
+    server, thread = _running_server()
+    try:
+        _request(server, "GET", "/healthz")
+        _request(server, "GET", "/missing")
+        status, body, headers = _request(server, "GET", "/metrics")
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    text = body.decode("utf-8")
+    assert status == 200
+    assert headers.get_content_type() == "text/plain"
+    assert "# TYPE incident_ai_http_requests_total counter" in text
+    assert 'incident_ai_http_requests_total{method="GET",path="/healthz",status="200"} 1' in text
+    assert 'incident_ai_http_requests_total{method="GET",path="/missing",status="404"} 1' in text
+    assert 'incident_ai_http_requests_total{method="GET",path="/metrics",status="200"} 1' not in text
+    assert len(headers["X-IncidentAI-Request-ID"]) == 32
+
+
+def test_metrics_bound_unknown_path_cardinality():
+    server, thread = _running_server()
+    try:
+        _request(server, "GET", "/unknown-path-a")
+        _request(server, "GET", "/unknown-path-b")
+        status, body, _ = _request(server, "GET", "/metrics")
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    text = body.decode("utf-8")
+    assert status == 200
+    assert 'incident_ai_http_requests_total{method="GET",path="/unknown",status="404"} 2' in text
+    assert "/unknown-path-a" not in text
+    assert "/unknown-path-b" not in text
 
 
 def test_analyze_endpoint_rejects_when_concurrency_limit_is_reached():
