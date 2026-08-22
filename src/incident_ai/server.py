@@ -65,7 +65,11 @@ OPENAPI_DOCUMENT = {
                 "operationId": "analyze",
                 "requestBody": {
                     "required": True,
-                    "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AnalyzeRequest"}}},
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/AnalyzeRequest"}
+                        }
+                    },
                 },
                 "responses": {
                     "200": {"description": "Incident analysis result."},
@@ -85,7 +89,11 @@ OPENAPI_DOCUMENT = {
                 "properties": {
                     "log": {"type": "string"},
                     "all": {"type": "boolean", "default": False},
-                    "input_format": {"type": "string", "enum": ["auto", "text", "jsonl"], "default": "auto"},
+                    "input_format": {
+                        "type": "string",
+                        "enum": ["auto", "text", "jsonl"],
+                        "default": "auto",
+                    },
                     "include_context": {"type": "boolean", "default": False},
                     "host": {"type": "string"},
                     "service": {"type": "string"},
@@ -121,13 +129,20 @@ def _analysis_payload(payload: dict[str, Any]) -> tuple[Any, int]:
         value = payload.get(key)
         if value is not None:
             if not isinstance(value, str) or not value:
-                raise APIError(f"'{key}' must be a non-empty string when supplied", f"invalid_{key}")
+                raise APIError(
+                    f"'{key}' must be a non-empty string when supplied",
+                    f"invalid_{key}",
+                )
             source_filters[key] = value
 
     include_context = payload.get("include_context", False)
     all_incidents = payload.get("all", False)
     redact = payload.get("redact", False)
-    for key, value in (("include_context", include_context), ("all", all_incidents), ("redact", redact)):
+    for key, value in (
+        ("include_context", include_context),
+        ("all", all_incidents),
+        ("redact", redact),
+    ):
         if not isinstance(value, bool):
             raise APIError(f"'{key}' must be a boolean", f"invalid_{key}")
 
