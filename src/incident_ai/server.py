@@ -36,14 +36,37 @@ OPENAPI_DOCUMENT = {
         "version": __version__,
     },
     "paths": {
-        "/healthz": {"get": {"operationId": "health", "responses": {"200": {"description": "Service is healthy."}}}},
-        "/version": {"get": {"operationId": "version", "responses": {"200": {"description": "API and package version metadata."}}}},
-        "/capabilities": {"get": {"operationId": "capabilities", "responses": {"200": {"description": "Supported endpoints, features, and limits."}}}},
-        "/openapi.json": {"get": {"operationId": "openapi", "responses": {"200": {"description": "OpenAPI 3.0.3 document."}}}},
+        "/healthz": {
+            "get": {
+                "operationId": "health",
+                "responses": {"200": {"description": "Service is healthy."}},
+            }
+        },
+        "/version": {
+            "get": {
+                "operationId": "version",
+                "responses": {"200": {"description": "API and package version metadata."}},
+            }
+        },
+        "/capabilities": {
+            "get": {
+                "operationId": "capabilities",
+                "responses": {"200": {"description": "Supported endpoints, features, and limits."}},
+            }
+        },
+        "/openapi.json": {
+            "get": {
+                "operationId": "openapi",
+                "responses": {"200": {"description": "OpenAPI 3.0.3 document."}},
+            }
+        },
         "/analyze": {
             "post": {
                 "operationId": "analyze",
-                "requestBody": {"required": True, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AnalyzeRequest"}}}},
+                "requestBody": {
+                    "required": True,
+                    "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AnalyzeRequest"}}},
+                },
                 "responses": {
                     "200": {"description": "Incident analysis result."},
                     "400": {"description": "Invalid request."},
@@ -109,7 +132,12 @@ def _analysis_payload(payload: dict[str, Any]) -> tuple[Any, int]:
             raise APIError(f"'{key}' must be a boolean", f"invalid_{key}")
 
     try:
-        normalized = normalize_input(raw_log, input_format, include_context=include_context, source_filters=source_filters)
+        normalized = normalize_input(
+            raw_log,
+            input_format,
+            include_context=include_context,
+            source_filters=source_filters,
+        )
     except InputFormatError as exc:
         raise APIError(f"invalid structured input: {exc}", "invalid_structured_input") from exc
 
@@ -151,7 +179,10 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
                 "version": __version__,
                 "endpoints": API_ENDPOINTS,
                 "features": API_FEATURES,
-                "limits": {"max_body_bytes": self.server.max_body_bytes, "max_concurrent_requests": self.server.max_concurrent_requests},  # type: ignore[attr-defined]
+                "limits": {
+                    "max_body_bytes": self.server.max_body_bytes,  # type: ignore[attr-defined]
+                    "max_concurrent_requests": self.server.max_concurrent_requests,  # type: ignore[attr-defined]
+                },
             }
             self._write_json(200, payload)
             return
@@ -211,7 +242,13 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
         return
 
 
-def serve(host: str = "127.0.0.1", port: int = 8080, *, max_body_bytes: int = DEFAULT_MAX_BODY_BYTES, max_concurrent_requests: int = DEFAULT_MAX_CONCURRENT_REQUESTS) -> None:
+def serve(
+    host: str = "127.0.0.1",
+    port: int = 8080,
+    *,
+    max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
+    max_concurrent_requests: int = DEFAULT_MAX_CONCURRENT_REQUESTS,
+) -> None:
     """Run the local IncidentAI HTTP API."""
     if not 1 <= port <= 65535:
         raise ValueError("port must be between 1 and 65535")
