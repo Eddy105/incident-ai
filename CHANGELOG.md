@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented here.
 
+## [0.19.0] - 2026-08-22
+
+### Added
+
+- Add dependency-free `GET /metrics` Prometheus text exposition for local monitoring integrations
+- Expose bounded `incident_ai_http_requests_total` counters by method, endpoint, and status
+- Normalize unknown request paths to `/unknown` to prevent unbounded metric label cardinality
+- Advertise Prometheus metrics through `GET /capabilities` with the `prometheus_metrics` feature identifier
+- Add the metrics endpoint to OpenAPI discovery and local API documentation
+- Add regression coverage for metric exposition and bounded unknown-path labels
+
 ## [0.18.0] - 2026-08-22
 
 ### Added
