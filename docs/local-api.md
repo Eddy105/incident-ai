@@ -34,7 +34,7 @@ The response contains:
 - `api_version` — stable API major version.
 - `version` — installed IncidentAI release.
 - `endpoints` — supported local API endpoints.
-- `features` — supported analysis capabilities, including multi-incident analysis, JSON Lines ingestion, redaction, stable error codes, stable fingerprints, and bounded concurrency.
+- `features` — supported analysis capabilities, including multi-incident analysis, JSON Lines ingestion, redaction, stable error codes, stable fingerprints, bounded concurrency, and content-type validation.
 - `limits.max_body_bytes` — effective request body limit for the running server instance.
 - `limits.max_concurrent_requests` — maximum number of simultaneous `/analyze` requests.
 
@@ -56,6 +56,12 @@ The request object supports:
 - `include_context` (boolean)
 - `host`, `service`, `unit`, `container` source filters
 - `redact` (boolean)
+
+### Content type
+
+`POST /analyze` accepts JSON requests. When a `Content-Type` header is supplied, its media type must be `application/json`; parameters such as `charset=utf-8` are accepted. An explicit non-JSON media type returns HTTP `415` with the stable `unsupported_media_type` code.
+
+For backward compatibility, requests that omit `Content-Type` continue to be accepted and are interpreted as JSON based on the existing request contract.
 
 ## Concurrency limit
 
@@ -94,6 +100,7 @@ Current error codes include:
 | 400 | `incomplete_request_body` | The declared request body could not be read completely. |
 | 404 | `not_found` | Endpoint does not exist. |
 | 413 | `request_body_too_large` | Request exceeds the configured body limit. |
+| 415 | `unsupported_media_type` | An explicit request media type is not `application/json`. |
 | 429 | `concurrency_limit_reached` | The configured concurrent analysis budget is exhausted. |
 
 New error codes may be added without changing the API major version. Clients should treat unknown codes as generic request failures.
@@ -110,7 +117,7 @@ The response contains `api_version` for compatibility decisions and `version` fo
 
 ## Security boundary
 
-The default bind address is loopback-only. The request body is limited to 1 MiB by default, and concurrent `/analyze` processing is limited to 16 requests by default. These bounds prevent an accidental monitoring client from causing unbounded memory or analysis-thread pressure. `/capabilities` reports the effective limits for the running instance.
+The default bind address is loopback-only. The request body is limited to 1 MiB by default, concurrent `/analyze` processing is limited to 16 requests by default, and explicit non-JSON content types are rejected. These bounds and protocol validation prevent accidental monitoring clients from causing unbounded memory or analysis-thread pressure and make the HTTP contract deterministic. `/capabilities` reports the effective resource limits for the running instance.
 
 If the server is intentionally exposed beyond localhost, put it behind an authenticated reverse proxy and network policy. The built-in API does not implement authentication, TLS, rate limiting, or user management. The concurrency bound is a resource-protection control, not an authentication or rate-limiting mechanism.
 
