@@ -118,7 +118,7 @@ def test_openapi_endpoint_exposes_local_api_contract():
 
     assert status == 200
     assert payload["openapi"] == "3.0.3"
-    assert payload["info"]["version"] == "0.17.0"
+    assert payload["info"]["version"] == "0.18.0"
     assert set(payload["paths"]) == {"/healthz", "/version", "/capabilities", "/openapi.json", "/analyze"}
     assert payload["paths"]["/analyze"]["post"]["requestBody"]["content"]["application/json"]
 
