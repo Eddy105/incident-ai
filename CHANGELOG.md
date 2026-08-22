@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented here.
 
+## [0.16.0] - 2026-08-22
+
+### Added
+
+- Validate explicit `Content-Type` headers on local `POST /analyze` requests
+- Return stable `unsupported_media_type` errors with HTTP 415 for non-JSON media types
+- Advertise content-type validation through local API capability discovery
+- Preserve backward compatibility for clients that omit `Content-Type`
+- Add regression coverage for rejected media types and legacy header omission
+
 ## [0.15.0] - 2026-08-22
 
 ### Security
