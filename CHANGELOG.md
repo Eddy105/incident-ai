@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented here.
 
+## [0.18.0] - 2026-08-22
+
+### Added
+
+- Add a unique `X-IncidentAI-Request-ID` response header to every local API response
+- Generate request IDs independently per HTTP request for end-to-end monitoring correlation
+- Advertise request IDs through `GET /capabilities` with the `request_ids` feature identifier
+- Add regression coverage for successful, error, and concurrent-limit responses
+
 ## [0.17.0] - 2026-08-22
 
 ### Added
