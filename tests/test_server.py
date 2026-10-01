@@ -147,7 +147,7 @@ def test_metrics_endpoint_exposes_prometheus_counters():
     assert headers.get_content_type() == "text/plain"
     assert "# TYPE incident_ai_http_requests_total counter" in text
     assert 'incident_ai_http_requests_total{method="GET",path="/healthz",status="200"} 1' in text
-    assert 'incident_ai_http_requests_total{method="GET",path="/missing",status="404"} 1' in text
+    assert 'incident_ai_http_requests_total{method="GET",path="/unknown",status="404"} 1' in text
     assert 'incident_ai_http_requests_total{method="GET",path="/metrics",status="200"} 1' not in text
     assert len(headers["X-IncidentAI-Request-ID"]) == 32
 
