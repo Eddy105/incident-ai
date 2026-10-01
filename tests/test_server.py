@@ -88,7 +88,7 @@ def test_version_endpoint_exposes_api_and_package_version():
         server.server_close()
 
     assert status == 200
-    assert payload == {"api_version": "1", "version": "0.19.0"}
+    assert payload == {"api_version": "1", "version": "0.20.0"}
 
 
 def test_capabilities_endpoint_exposes_integration_contract():
@@ -102,7 +102,7 @@ def test_capabilities_endpoint_exposes_integration_contract():
 
     assert status == 200
     assert payload["api_version"] == "1"
-    assert payload["version"] == "0.19.0"
+    assert payload["version"] == "0.20.0"
     assert payload["endpoints"] == ["/healthz", "/version", "/capabilities", "/openapi.json", "/metrics", "/analyze"]
     assert "multi_incident" in payload["features"]
     assert "stable_error_codes" in payload["features"]
@@ -112,6 +112,7 @@ def test_capabilities_endpoint_exposes_integration_contract():
     assert "openapi_discovery" in payload["features"]
     assert "request_ids" in payload["features"]
     assert "prometheus_metrics" in payload["features"]
+    assert "prometheus_analysis_metrics" in payload["features"]
     assert payload["limits"] == {"max_body_bytes": 2048, "max_concurrent_requests": 4}
 
 
@@ -126,7 +127,7 @@ def test_openapi_endpoint_exposes_local_api_contract():
 
     assert status == 200
     assert payload["openapi"] == "3.0.3"
-    assert payload["info"]["version"] == "0.19.0"
+    assert payload["info"]["version"] == "0.20.0"
     assert set(payload["paths"]) == {"/healthz", "/version", "/capabilities", "/openapi.json", "/metrics", "/analyze"}
     assert payload["paths"]["/analyze"]["post"]["requestBody"]["content"]["application/json"]
 
@@ -136,6 +137,7 @@ def test_metrics_endpoint_exposes_prometheus_counters():
     try:
         _request(server, "GET", "/healthz")
         _request(server, "GET", "/missing")
+        _request(server, "POST", "/analyze", {"log": "Permission denied"}, "application/json")
         status, body, headers = _request(server, "GET", "/metrics")
     finally:
         server.shutdown()
@@ -149,6 +151,9 @@ def test_metrics_endpoint_exposes_prometheus_counters():
     assert 'incident_ai_http_requests_total{method="GET",path="/healthz",status="200"} 1' in text
     assert 'incident_ai_http_requests_total{method="GET",path="/unknown",status="404"} 1' in text
     assert 'incident_ai_http_requests_total{method="GET",path="/metrics",status="200"} 1' not in text
+    assert "# TYPE incident_ai_analyses_total counter" in text
+    assert 'incident_ai_analyses_total{incident_type="permission_denied"} 1' in text
+    assert 'incident_ai_analyses_total{incident_type="unknown"} 0' in text
     assert len(headers["X-IncidentAI-Request-ID"]) == 32
 
 
