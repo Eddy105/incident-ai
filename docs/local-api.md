@@ -47,6 +47,8 @@ curl -sS http://127.0.0.1:8080/metrics
 
 The endpoint uses the Prometheus text exposition format and currently exposes the `incident_ai_http_requests_total` counter with method, bounded endpoint path, and HTTP status labels. Unknown request paths are normalized to `/unknown` so an attacker or noisy client cannot create unbounded metric label cardinality.
 
+Successful `/analyze` requests also increment `incident_ai_analyses_total` with an `incident_type` label. Known incident types are initialized at `0` and unexpected future values are collapsed to `other`, keeping the series bounded. Multi-incident analyses increment one series per returned incident. The analysis counters are cumulative for the process lifetime and reset on restart. The metric names and labels follow Prometheus counter and bounded-cardinality conventions. citeturn2search0turn2search3
+
 Metrics are in-memory and reset when the process restarts. The metrics endpoint is read-only and does not expose log contents, incident evidence, credentials, or request bodies.
 
 `GET /capabilities` advertises the `prometheus_metrics` feature and includes `/metrics` in its endpoint list. Feature names remain additive so clients can safely ignore capabilities they do not understand.
