@@ -11,11 +11,14 @@ from .analyzer import analyze_all, analyze_text
 from .ingest import InputFormatError, normalize_input
 from .models import IncidentAnalysis
 from .redaction import redact_analysis
+from .rules import RULES
 
 DEFAULT_MAX_BODY_BYTES = 1_048_576
 DEFAULT_MAX_CONCURRENT_REQUESTS = 16
 API_VERSION = "1"
 API_ENDPOINTS = ["/healthz", "/version", "/capabilities", "/openapi.json", "/metrics", "/analyze"]
+KNOWN_INCIDENT_TYPES = frozenset(rule.incident_type for rule in RULES) | {"unknown", "other"}
+
 API_FEATURES = [
     "multi_incident",
     "structured_jsonl",
@@ -29,6 +32,7 @@ API_FEATURES = [
     "openapi_discovery",
     "request_ids",
     "prometheus_metrics",
+    "prometheus_analysis_metrics",
 ]
 
 OPENAPI_DOCUMENT = {
@@ -132,6 +136,7 @@ class Metrics:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._requests: dict[tuple[str, str, int], int] = {}
+        self._analyses: dict[str, int] = {incident_type: 0 for incident_type in sorted(KNOWN_INCIDENT_TYPES)}
 
     def record(self, method: str, path: str, status: int) -> None:
         bounded_path = path if path in self._KNOWN_PATHS else "/unknown"
@@ -139,17 +144,32 @@ class Metrics:
         with self._lock:
             self._requests[key] = self._requests.get(key, 0) + 1
 
+    def record_analysis(self, incident_types: tuple[str, ...]) -> None:
+        with self._lock:
+            for incident_type in incident_types:
+                bounded_type = incident_type if incident_type in KNOWN_INCIDENT_TYPES else "other"
+                self._analyses[bounded_type] = self._analyses.get(bounded_type, 0) + 1
+
     def render(self) -> bytes:
         with self._lock:
-            samples = sorted(self._requests.items())
+            request_samples = sorted(self._requests.items())
+            analysis_samples = sorted(self._analyses.items())
         lines = [
             "# HELP incident_ai_http_requests_total Total HTTP requests handled by IncidentAI.",
             "# TYPE incident_ai_http_requests_total counter",
         ]
-        for (method, path, status), count in samples:
+        for (method, path, status), count in request_samples:
             lines.append(
                 f'incident_ai_http_requests_total{{method="{method}",path="{path}",status="{status}"}} {count}'
             )
+        lines.extend(
+            [
+                "# HELP incident_ai_analyses_total Total incident analyses completed by IncidentAI.",
+                "# TYPE incident_ai_analyses_total counter",
+            ]
+        )
+        for incident_type, count in analysis_samples:
+            lines.append(f'incident_ai_analyses_total{{incident_type="{incident_type}"}} {count}')
         return ("\n".join(lines) + "\n").encode("utf-8")
 
 
@@ -313,6 +333,8 @@ class IncidentAPIHandler(BaseHTTPRequestHandler):
         except APIError as exc:
             self._write_error(400, exc.code, str(exc))
             return
+        analysis_items = result if isinstance(result, list) else [result]
+        self.server.metrics.record_analysis(tuple(str(item["incident_type"]) for item in analysis_items))  # type: ignore[attr-defined]
         self._write_json(status, result)
 
     def log_message(self, format: str, *args: object) -> None:
