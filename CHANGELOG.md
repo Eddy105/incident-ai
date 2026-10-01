@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented here.
 
+## [0.20.0] - 2026-10-01
+
+### Added
+
+- Expose bounded `incident_ai_analyses_total` Prometheus counters by incident type
+- Initialize the known analysis series at zero so monitoring queries remain stable before the first incident
+- Collapse unexpected incident types to an `other` label to preserve bounded metric cardinality
+- Advertise analysis metrics through `GET /capabilities` with the `prometheus_analysis_metrics` feature identifier
+- Add regression coverage for analysis metric recording and zero initialization
+
 ## [0.19.0] - 2026-08-22
 
 ### Added
